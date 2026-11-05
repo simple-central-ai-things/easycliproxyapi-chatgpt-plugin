@@ -1,0 +1,4 @@
+plugins/
+*.so
+*.h
+.superpowers/

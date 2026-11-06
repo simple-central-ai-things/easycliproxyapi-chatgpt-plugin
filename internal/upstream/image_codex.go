@@ -41,9 +41,9 @@ const (
 	codexImageTimeout = 1200 * time.Second
 
 	// WIRE payload constants — byte-identical to the reference.
-	codexResponsesModel = "gpt-5.5"
+	codexResponsesModel        = "gpt-5.5"
 	codexResponsesInstructions = "Use the image_generation tool to create exactly one image for the user's request. Return the generated image result."
-	codexImageToolModel = "gpt-image-2"
+	codexImageToolModel        = "gpt-image-2"
 
 	// Oracle `str(size or "1024x1024")` / `str(quality or "auto")` fallbacks.
 	codexDefaultImageSize    = "1024x1024"

@@ -24,10 +24,11 @@ each ChatGPT consumer account into a credential the EasyCLI host can manage
 through the gateway's existing model routing. No extra container, no extra
 published port: the plugin loads inside the host process.
 
-This repository currently contains the ABI skeleton (registration,
-identifiers, config, dispatch, and the offline test harness). The protocol
-implementations land incrementally in later tasks; see `docs/tasks/` for the
-workstream state.
+The protocol implementation lands incrementally: the credential lifecycle
+(auth parse/refresh, browser OAuth login), the per-credential model catalog,
+the quota cards and the OpenAI-format text conversation executor (streaming
+and non-streaming) are in place; the `openai-image` executor surface lands
+next. See `docs/tasks/` for the workstream state.
 
 ## Layout
 
@@ -75,6 +76,25 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   rejects unknown keys.
 - Client surface: models publish as `chatgpt-proxy/<model>`; image models as
   `chatgpt-proxy/gpt-image-2-proxy` and `chatgpt-proxy/codex-gpt-image-2`.
+- Executor surface: text conversation turns arrive as `executor.execute` /
+  `executor.execute_stream` in the `openai` format. Model resolution strips
+  the `chatgpt-proxy/openai/` prefix to the upstream slug; anything else
+  (the image models, a foreign id) is refused with typed `400
+  model_unknown`. Any non-empty `tools` array is refused with typed `400
+  tools_unsupported` before any upstream call. `thinking_effort` /
+  `reasoning_effort` map per the upstream table (none/auto omitted,
+  low/medium/high as-is, xhigh/extended → `extended`). A `401` on the turn
+  start forces the internal token refresh, then exactly one retry; a failed
+  refresh or a second `401` ends in typed `401 invalid_token`. Error classes:
+  `invalid_token` 401, `upstream_stream_timeout` 504 (the turn may continue
+  upstream), `content_policy_violation` 400, `rate_limited` 429 retryable
+  (carrying `Retry-After`), `no_available_model` 404, `tools_unsupported`
+  400, `model_unknown` 400, `no_assistant_content` 502 — a completed turn
+  with no visible assistant message is always typed 502, never an empty 200.
+- Usage counts are a documented ESTIMATE (`bytes / 4` per message): the
+  upstream never returns token counts for these turns, so `prompt_tokens` /
+  `completion_tokens` / `total_tokens` are heuristic and must never be
+  treated as exact.
 - Secrets (tokens, passwords) never appear in RPC envelopes, error
   messages, logs, or quota responses; auth-file names are stable hashes.
 

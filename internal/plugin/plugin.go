@@ -8,7 +8,9 @@
 // same Manager. auth.parse / auth.refresh (Task 3) claim type=chatgpt-proxy
 // credential records and run the OAuth refresh_token lifecycle;
 // auth.login.start / auth.login.poll (Task 4) run the browser OAuth PKCE
-// flow against the host's callback-file mechanism.
+// flow against the host's callback-file mechanism;
+// executor.execute / executor.execute_stream (Task 12) serve OpenAI-format
+// text conversation turns over the sentinel handshake + conversation SSE.
 package plugin
 
 import (
@@ -107,6 +109,10 @@ func (m *Manager) Handle(method string, request []byte) (resp []byte, err error)
 		return m.handleModelStatic(request)
 	case pluginabi.MethodModelForAuth:
 		return m.handleModelForAuth(request)
+	case pluginabi.MethodExecutorExecute:
+		return m.handleExecutorExecute(request)
+	case pluginabi.MethodExecutorExecuteStream:
+		return m.handleExecutorExecuteStream(request)
 	case pluginabi.MethodPluginQuiesce, pluginabi.MethodPluginShutdown:
 		return m.handleShutdown()
 	default:

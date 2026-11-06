@@ -2,7 +2,7 @@
 
 // Stub of the utls leg for builds with -tags live but without the utls tag:
 // leg (b) cannot run, so the test reports it unavailable instead. The real
-// implementation lives in utls_client.go (//go:build live && utls).
+// implementation lives in utls_client_test.go (//go:build live && utls).
 package tests
 
 import (

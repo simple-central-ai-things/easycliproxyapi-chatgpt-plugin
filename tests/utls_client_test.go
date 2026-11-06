@@ -10,12 +10,15 @@
 // not a *tls.Conn (it keys the upgrade off tls.ConnectionState, which utls
 // conns expose but net/http never consults for custom dialers).
 //
-// Hello id: utls v1.8.2 has no HelloChrome_110 constant; the pinned
-// first-handshake Chrome ids jump from 106 to the PSK resumption variants
-// (112/114/115), which must not be used for an initial connection. So this
-// leg uses HelloChrome_106_Shuffle — the closest pinned Chrome 110 id
-// (Chrome 106 already sends the shuffled-extension layout the 110 line
-// kept).
+// Hello id: utls v1.8.2 has no HelloChrome_110 constant, and the Chrome ids
+// that sit closer to 110 (112/114/115) are PSK session-resumption variants
+// that must not open a first handshake. HelloChrome_106_Shuffle is
+// therefore the closest first-handshake Chrome id available in v1.8.2.
+//
+// Known limitation of the spike: the User-Agent still claims Chrome/110
+// while the TLS fingerprint is Chrome 106's. If leg (b)'s verdict turns out
+// to be load-bearing for the plugin, Task 5's production transport may pick
+// a different (or custom) hello to remove that mismatch.
 package tests
 
 import (

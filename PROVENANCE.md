@@ -17,8 +17,15 @@ the plugin's default upstream `tls-mode`.
   `Accept-Language: zh-CN,zh;q=0.9`, `Origin: https://chatgpt.com`,
   `Referer: https://chatgpt.com/`,
   `OAI-Client-Version: prod-a194cd50d4416d3c0b47c740f206b12ce60f5887`,
-  `OAI-Client-Build-Number: 6708908`, a Chrome 110-line browser
-  `User-Agent`, and `Authorization: Bearer <token>`.
+  `OAI-Client-Build-Number: 6708908`, `X-OpenAI-Target-Path: /backend-api/models`
+  and `X-OpenAI-Target-Route: /backend-api/models` (both carry the bare path
+  template without the query string, per the reference's `list_models` →
+  `_headers(route)` convention), a Chrome 110-line browser `User-Agent`, and
+  `Authorization: Bearer <token>`.
+- **Out of scope for the spike:** wire-level header casing and ordering
+  canonicalization — Go's `http.Header.Set` canonicalizes casing and the
+  transport emits its own ordering; the production transport (Task 5) owns
+  byte-exact header order if it ever matters to the upstream.
 
 ## How to run (operator)
 
@@ -38,7 +45,7 @@ token and rerun.
 | Leg   | Transport                              | HTTP status | Models JSON | Body bytes | Snippet / notes |
 |-------|----------------------------------------|-------------|-------------|------------|-----------------|
 | (a)   | stdlib `http.Client`, default `crypto/tls` hello | PENDING RUN | PENDING RUN | PENDING RUN |                 |
-| (b)   | utls `HelloChrome_106_Shuffle` (closest pinned Chrome 110 id) + x/net/http2 | PENDING RUN | PENDING RUN | PENDING RUN | see dependency note below |
+| (b)   | utls `HelloChrome_106_Shuffle` (closest first-handshake id to Chrome 110 in v1.8.2) + x/net/http2 | PENDING RUN | PENDING RUN | PENDING RUN | UA/hello mismatch noted below |
 
 ## Verdict
 
@@ -49,26 +56,34 @@ Chosen default TLSMode: `stdlib`
 >
 > - **(a) returns 200 with models JSON** → stdlib TLS is accepted; keep
 >   `tls-mode: stdlib` and prune the utls/x-net experiment from `go.mod`
->   (keep `tests/utls_client*.go`, still tag-gated — documented here as
+>   (keep `tests/utls_client*_test.go`, still tag-gated — documented here as
 >   unused-but-retained in case the verdict is ever revisited).
 > - **(a) is challenged (403 / Cloudflare interstitial) while (b) returns
 >   200** → set the line above to `utls` and keep the pinned dependencies
 >   below. The plugin's direct-client utls path reads the host proxy from
->   `HostConfigSummary.ProxyURL` (per the plan's global constraints).
+>   `HostConfigSummary.ProxyURL` (per the plan's global constraints). Note
+>   that this verdict also promotes a SECOND production dependency —
+>   `golang.org/x/net` for the h2 transport (see below) — which needs
+>   controller sign-off before Task 5 wires the production path.
 > - **both legs fail** → the token or the operator's network path is wrong;
 >   rerun before changing anything.
 
 ## Dependencies pinned for this spike
 
 - `github.com/refraction-networking/utls v1.8.2` — pure Go; imported only by
-  the utls-tagged leg (`tests/utls_client.go`) and never linked into the
-  default build or the plugin `.so`. v1.8.2 has no `HelloChrome_110`
-  constant and its 112/114/115 Chrome ids are PSK resumption variants
-  unsuitable for a first handshake, so leg (b) pins
-  `utls.HelloChrome_106_Shuffle` — the closest pinned Chrome 110 id
-  (Chrome 106 already sends the shuffled-extension layout the 110 line
-  kept).
+  the utls-tagged leg (`tests/utls_client_test.go`) and never linked into
+  the default build or the plugin `.so`. v1.8.2 has no `HelloChrome_110`
+  constant and its 112/114/115 Chrome ids are PSK session-resumption
+  variants unsuitable for opening a first handshake, so leg (b) pins
+  `utls.HelloChrome_106_Shuffle` — the closest first-handshake Chrome id
+  available in v1.8.2.
+  **Known spike limitation:** the `User-Agent` still claims Chrome/110
+  while the TLS fingerprint is Chrome 106's; if leg (b)'s verdict proves
+  load-bearing, Task 5's production transport may pick a different (or
+  custom) hello to remove that mismatch.
 - `golang.org/x/net v0.57.0` — `http2.Transport` with a custom `DialTLS` for
   the same leg (the stdlib's bundled http2 transport is not importable, and
   `net/http.Transport` cannot speak h2 over a non-`*tls.Conn`; the version is
-  the graph maximum, already required by the SDK).
+  the graph maximum, already required by the SDK). Test-only today; a `utls`
+  verdict promotes it to a SECOND production dependency needing controller
+  sign-off (see Verdict above).

@@ -19,3 +19,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Attribution: the ChatGPT consumer-account protocol implementation in this
+plugin is re-derived from `basketikun/chatgpt2api`
+(https://github.com/basketikun/chatgpt2api), MIT-licensed. The upstream wire
+formats (payloads, session headers, fingerprint fields) are kept
+byte-compatible with the reference on purpose, and the golden-file tests in
+`internal/upstream/testdata/` pin that compatibility. No code is copied from
+the reference; all implementation, tests and documentation in this repo are
+original.

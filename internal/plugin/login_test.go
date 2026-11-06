@@ -124,7 +124,7 @@ func TestStartURLShape(t *testing.T) {
 		t.Errorf("Provider = %q, want %q", out.Provider, providerKey)
 	}
 	now := time.Now()
-	if out.ExpiresAt.Before(now.Add(loginAttemptTTL - time.Minute)) || out.ExpiresAt.After(now.Add(loginAttemptTTL + time.Minute)) {
+	if out.ExpiresAt.Before(now.Add(loginAttemptTTL-time.Minute)) || out.ExpiresAt.After(now.Add(loginAttemptTTL+time.Minute)) {
 		t.Errorf("ExpiresAt = %v, want ≈ now+%v", out.ExpiresAt, loginAttemptTTL)
 	}
 

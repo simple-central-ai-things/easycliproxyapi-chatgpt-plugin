@@ -39,22 +39,62 @@ main.go                       CGO glue only: exports cliproxy_plugin_init /
                               cliproxyPluginShutdown; forwards every RPC to
                               internal/plugin.Manager.Handle (with the 2^31
                               size_t guard, maxRequestLen)
+internal/model/               leaf package: Credential + auth-file storage
+                              shape, Fingerprint, Config + ParseConfig — the
+                              canonical type home (upstream consumes it too;
+                              dependency direction plugin -> upstream ->
+                              model; internal/plugin aliases the types)
 internal/plugin/
   plugin.go                   Manager + RPC dispatch (the single seam: all
                               host I/O flows through the injected caller),
                               identity constants (pluginID, providerKey,
                               pluginVersion, githubRepo), registration
                               envelope with the pinned capability surface
-  config.go                   fail-closed YAML config: ParseConfig applies
-                              defaults, rejects unknown keys, validates
-                              tls-mode / model-prefix / timeouts
+  config.go / cred.go         aliases + wrappers into internal/model
   envelope.go                 ok / errEnvelope helpers with typed
                               Error{Code,Message,HTTPStatus,Retryable}
+  auth.go                     auth.parse / auth.refresh: OAuth refresh_token
+                              lifecycle + plan probe, fail-closed record
+                              checks
+  login.go                    auth.login.start / auth.login.poll: browser
+                              OAuth PKCE over the host callback-file
+                              mechanism (in-memory attempt store)
+  models.go                   per-credential model catalog (upstream
+                              /backend-api/models union + image models),
+                              stale-while-unavailable snapshots
+  quota.go                    quota.describe / quota.fetch (account-status
+                              triple probe -> native cards) / quota.reset
+                              (typed refusal)
+  executor.go                 executor execute/stream dispatch, 401
+                              refresh-retry loop, upstream error -> envelope
+                              mapping
+  executor_text.go            the openai-format conversation turn
+                              (resolution, tools refusal, effort mapping,
+                              usage estimate, chat.completion frames)
+  executor_image.go           the openai-image turn (route by base name,
+                              generations/edits payload, inline b64_json)
+  matrix_test.go              pins the README contract matrices to the
+                              dispatcher / registration / ParseConfig
   *_test.go                   offline unit tests against a fake caller
+internal/upstream/            the upstream reverse protocol: transport seam
+                              over the host callbacks, session headers,
+                              sentinel/PoW/turnstile VM, conversation SSE +
+                              patch protocol, poll, profile/quota probe,
+                              web-drawing + codex image routes, files trio;
+                              golden-file tests (testdata/) pin the wire
+                              payloads
 tests/loadsmoke/              dlopen() load smoke: the built .so through the
                               real C ABI against a fake host (offline; skips
                               when the artifact is absent; CI builds first)
+tests/live_tls_test.go        operator-gated TLS fingerprint spike (-tags
+                              live; verdict ledger PROVENANCE.md)
+tests/live_executor_test.go   operator-gated live executor smoke (-tags live)
+tests/utls_client*_test.go    utls leg of the spike (-tags 'live utls';
+                              never linked into the default build)
 registry.json                 host plugin-store registry entry
+PROVENANCE.md                 TLS spike verdict ledger
+CHANGELOG.md                  user-facing release summaries
+RELEASE_NOTES.md              the v0.1.0 release notes
 plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
 .github/workflows/tests.yml   CI: go vet + go test + glibc c-shared build
                               (blocking gate) + loadsmoke
@@ -106,6 +146,15 @@ builds the c-shared artifact on `ubuntu-latest` and then runs vet + tests, so
 `tests/loadsmoke` exercises the real `.so` in CI. Tests are pure — no
 network, no EasyCLI binary, no secrets.
 
+The default suite is offline; the live verification in `tests/` is
+operator-gated behind `-tags live` (the TLS spike records its verdict in
+`PROVENANCE.md`, the live executor smoke needs a deployed EasyCLI instance +
+a live credential) and never compiles in CI. `internal/plugin/matrix_test.go`
+pins the README contract matrices (capabilities, model ids, config defaults,
+error classes) to the dispatcher, the registration envelope and
+`ParseConfig` — when the README and the code disagree, CI is red; update
+both in the same change.
+
 ## Deploy
 
 EasyCLI is embedded in SCPM's single `gateway` container (`easycli/`), with
@@ -134,7 +183,7 @@ one gateway port.
 
 ## Related
 
-- README.md (this repo) · sibling plugins: commandcode, opencode, mistral
-- docs page: `docs/repos/easycliproxyapi-chatgpt-plugin.md` (added by the
-  docs workstream)
+- README.md (this repo) · CHANGELOG.md · RELEASE_NOTES.md · PROVENANCE.md
+- sibling plugins: commandcode, opencode, mistral
+- docs page: `docs/repos/easycliproxyapi-chatgpt-plugin.md`
 - siblings: SCPM (proxy-manager), the org folder-root `AGENTS.md`

@@ -52,6 +52,10 @@ type Manager struct {
 	// config snapshot and vice versa, so the two locks stay unentangled.
 	loginMu sync.Mutex
 	logins  map[string]loginAttempt
+
+	// models holds the per-credential catalog snapshots (models.go); it
+	// carries its own lock for the same reason.
+	models *modelCatalog
 }
 
 // New returns a Manager whose outbound host calls flow through host. A nil
@@ -60,7 +64,7 @@ func New(host caller) (*Manager, error) {
 	if host == nil {
 		return nil, fmt.Errorf("host caller is required")
 	}
-	return &Manager{host: host, logins: make(map[string]loginAttempt)}, nil
+	return &Manager{host: host, logins: make(map[string]loginAttempt), models: newModelCatalog()}, nil
 }
 
 // Handle dispatches one RPC method and returns envelope bytes. Handler
@@ -99,6 +103,10 @@ func (m *Manager) Handle(method string, request []byte) (resp []byte, err error)
 		return m.handleLoginStart(request)
 	case pluginabi.MethodAuthLoginPoll:
 		return m.handleLoginPoll(request)
+	case pluginabi.MethodModelStatic:
+		return m.handleModelStatic(request)
+	case pluginabi.MethodModelForAuth:
+		return m.handleModelForAuth(request)
 	case pluginabi.MethodPluginQuiesce, pluginabi.MethodPluginShutdown:
 		return m.handleShutdown()
 	default:
@@ -140,6 +148,7 @@ func (m *Manager) handleShutdown() ([]byte, error) {
 	m.mu.Lock()
 	m.cfg = Config{}
 	m.mu.Unlock()
+	m.models.reset()
 	return ok(struct{}{}), nil
 }
 

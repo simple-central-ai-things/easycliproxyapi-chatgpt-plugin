@@ -110,6 +110,12 @@ go test ./...
 Tests are offline: no network, no credentials, no host binary. CI builds the
 glibc `linux/amd64` artifact (the release gate) and then runs the same suite.
 
+`tests/live_tls_test.go` is the operator-gated TLS fingerprint spike behind
+`-tags live` (runbook in `PROVENANCE.md`). Its optional utls leg
+(`-tags 'live utls'`) pins `github.com/refraction-networking/utls v1.8.2` +
+`golang.org/x/net` in `go.mod`; both stay out of the default build and the
+plugin `.so` until the spike's verdict says otherwise.
+
 ## Related
 
 - Sibling plugins: `easycliproxyapi-commandcode-plugin`,

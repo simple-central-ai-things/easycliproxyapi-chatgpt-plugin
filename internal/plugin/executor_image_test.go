@@ -589,29 +589,85 @@ func TestStreamIsSingleChunk(t *testing.T) {
 		t.Fatalf("async stream response = %s, want an empty result (the payload is emitted downstream)", result)
 	}
 
+	// The registry host writes each emitted chunk VERBATIM into the
+	// text/event-stream body (no SSE synthesis on this path), so the plugin
+	// must emit framed SSE: one data: event carrying the final payload, then
+	// the [DONE] sentinel — matching the text executor's chunk contract.
 	emits, closes := fake.downstreamCounts()
-	if emits != 1 {
-		t.Fatalf("emits = %d, want exactly one payload chunk", emits)
+	if emits != 2 {
+		t.Fatalf("emits = %d, want the framed payload event + the [DONE] sentinel", emits)
 	}
 	if closes != 1 {
 		t.Fatalf("closes = %d, want exactly one", closes)
 	}
 
 	fake.mu.Lock()
-	emit := fake.emits[0]
+	emitsRec := append([]execStreamEmit(nil), fake.emits...)
 	closeRec := fake.closes[0]
 	fake.mu.Unlock()
-	if emit.streamID != execDownstreamID {
-		t.Fatalf("emit stream_id = %q, want the downstream id", emit.streamID)
+
+	first := emitsRec[0]
+	if first.streamID != execDownstreamID {
+		t.Fatalf("emit stream_id = %q, want the downstream id", first.streamID)
+	}
+	if !strings.HasPrefix(string(first.payload), "data: ") || !strings.HasSuffix(string(first.payload), "\n\n") {
+		t.Fatalf("first emit is not a framed SSE event: %q", first.payload)
 	}
 	var ir imageResponse
-	if err := json.Unmarshal(emit.payload, &ir); err != nil {
-		t.Fatalf("the single chunk is not the final images payload: %v (%s)", err, emit.payload)
+	if err := json.Unmarshal(first.payload[len("data: "):len(first.payload)-2], &ir); err != nil {
+		t.Fatalf("the framed chunk is not the final images payload: %v (%s)", err, first.payload)
 	}
-	if len(ir.Data) != 1 {
-		t.Fatalf("chunk data = %d, want 1", len(ir.Data))
+	if len(ir.Data) != 1 || ir.Data[0].B64JSON == "" {
+		t.Fatalf("chunk data = %+v, want one b64_json image entry", ir.Data)
+	}
+
+	if string(emitsRec[1].payload) != "data: [DONE]\n\n" {
+		t.Fatalf("last emit = %q, want the [DONE] sentinel", emitsRec[1].payload)
 	}
 	if closeRec.streamID != execDownstreamID || closeRec.errMsg != "" {
 		t.Fatalf("close = %+v, want one clean close of the downstream id", closeRec)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TestURLModeServedAsInlineBase64 — response_format "url" with a configured
+// base-url is still served as inline b64_json, NEVER a synthesized url: the
+// pipeline returns only raw bytes and the registry host would pass a non-empty
+// url through verbatim (suppressing its own functional data-URL fallback), so a
+// synthesized url would hand the client a dead link.
+// ---------------------------------------------------------------------------
+
+func TestURLModeServedAsInlineBase64(t *testing.T) {
+	cred := execCredential()
+	png := solidPNG()
+	s := &imgStub{
+		tokens:    upstream.SentinelTokens{ChatRequirements: "req-1"},
+		genResult: upstream.ImageResult{Images: []upstream.ImageOutput{{Data: png}}, RevisedPrompt: "a lighthouse"},
+	}
+	fake := newExecFakeCaller()
+	stubImageSeams(t, s)
+	m := execManager(t, fake, "base-url: https://images.example.org")
+
+	payload := imgJSONPayload(t, map[string]any{
+		"model":           "chatgpt-proxy/gpt-image-2-proxy",
+		"prompt":          "a lighthouse",
+		"response_format": "url",
+	})
+	resp, err := m.Handle(pluginabi.MethodExecutorExecute, execRequestBody(t,
+		imgRequest(t, cred, "chatgpt-proxy/gpt-image-2-proxy", payload, nil), ""))
+	if err != nil {
+		t.Fatalf("Handle(executor.execute): %v", err)
+	}
+
+	ir := decodeImageExecResult(t, resp)
+	if len(ir.Data) != 1 {
+		t.Fatalf("data = %d, want 1", len(ir.Data))
+	}
+	if ir.Data[0].URL != "" {
+		t.Fatalf("url = %q, want empty (never emit a synthesized url)", ir.Data[0].URL)
+	}
+	assertPNGInEntry(t, ir.Data[0].B64JSON, png)
+	if ir.Data[0].RevisedPrompt != "a lighthouse" {
+		t.Fatalf("revised_prompt = %q, want the prompt echoed", ir.Data[0].RevisedPrompt)
 	}
 }

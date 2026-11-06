@@ -27,7 +27,6 @@ package plugin
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -77,18 +76,16 @@ var (
 // imageTurn is one prepared openai-image request: everything the run loop, the
 // refresh-retry and the response assembly share.
 type imageTurn struct {
-	cfg            Config
-	cred           Credential
-	upstream       upstream.Upstream
-	route          imageRoute
-	prompt         string
-	size           string
-	quality        string
-	n              int
-	responseFormat string // "b64_json" (default) or "url"
-	references     []upstream.ReferenceImage
-	authFileName   string
-	imageID        string // one uuid per request (url-mode path component)
+	cfg          Config
+	cred         Credential
+	upstream     upstream.Upstream
+	route        imageRoute
+	prompt       string
+	size         string
+	quality      string
+	n            int
+	references   []upstream.ReferenceImage
+	authFileName string
 }
 
 // errImageRefreshFailed marks a forced image refresh that failed or could not
@@ -188,18 +185,16 @@ func (m *Manager) prepareImageTurn(req executorRequest) (*imageTurn, *pluginabi.
 	}
 
 	return &imageTurn{
-		cfg:            cfg,
-		cred:           cred,
-		upstream:       u,
-		route:          route,
-		prompt:         parsed.prompt,
-		size:           parsed.size,
-		quality:        parsed.quality,
-		n:              parsed.n,
-		responseFormat: parsed.responseFormat,
-		references:     parsed.references,
-		authFileName:   execAuthFileName(req),
-		imageID:        imageRunID(),
+		cfg:          cfg,
+		cred:         cred,
+		upstream:     u,
+		route:        route,
+		prompt:       parsed.prompt,
+		size:         parsed.size,
+		quality:      parsed.quality,
+		n:            parsed.n,
+		references:   parsed.references,
+		authFileName: execAuthFileName(req),
 	}, nil
 }
 
@@ -212,18 +207,6 @@ func imageRouteFor(base string, cfg Config) (imageRoute, bool) {
 		return imageRouteCodex, true
 	}
 	return imageRouteDrawing, false
-}
-
-// imageRunID builds one plain UUIDv4 per image request (the url-mode path
-// component); the turn id convention is shared with the text executor.
-func imageRunID() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		panic(fmt.Sprintf("uuid generation: %v", err))
-	}
-	b[6] = (b[6] & 0x0f) | 0x40 // version 4
-	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 // ---------------------------------------------------------------------------
@@ -332,6 +315,16 @@ func finalizeImageTurn(turn *imageTurn, results []upstream.ImageResult, runErr e
 				if turn.cfg.MessageAsError {
 					return nil, typedErr("content_policy_violation", imgErr.Message, http.StatusBadRequest)
 				}
+				// message-as-error off: emit the prose as a byte-less data entry
+				// (revised_prompt + warning message). This is the executor's
+				// CONTRACT (mirrors the reference `message` key) and is pinned by
+				// the offline test. KNOWN HOST-RENDER DEGRADATION (documented, not
+				// hidden): behind the registry host, extractXAIImagesResponse skips
+				// a data entry carrying neither b64_json nor url and then fails
+				// with "upstream did not return image output", so the client sees a
+				// 502 rather than the prose. A byte-less entry cannot survive the
+				// host re-render; surfacing the prose to the client would require a
+				// host-side change. See the README message-as-error contract.
 				envelope := map[string]any{
 					"created": time.Now().Unix(),
 					"data": []map[string]any{{
@@ -350,24 +343,29 @@ func finalizeImageTurn(turn *imageTurn, results []upstream.ImageResult, runErr e
 }
 
 // assembleImageResponse renders the pinned OpenAI images envelope: created, the
-// data[] entries (b64_json by default; url when response_format is url AND a
-// base_url is configured — the pipeline returns raw bytes with no upstream
-// URL, so url mode synthesizes a path under the configured base_url for the
-// operator to serve), and the DOCUMENTED usage estimate (never exact).
+// data[] entries and the DOCUMENTED usage estimate (never exact).
+//
+// Every entry is served as inline b64_json — NEVER a synthesized url. The image
+// pipelines (Task 9/10) return only raw bytes and discard the upstream
+// download URLs (bearer-gated chatgpt.com backend-api paths, not public), and a
+// c-shared library has no HTTP surface to serve bytes from. The registry host
+// re-renders image payloads via buildImagesAPIResponseFromXAI, which passes any
+// non-empty url VERBATIM (suppressing the host's own functional fallback), so a
+// synthesized url would hand the client a dead link. A b64_json-only entry is
+// instead rendered by the host as a functional url:"data:image/png;base64,..."
+// for the client — so url-mode requests are served as inline base64 (a real
+// resolvable url would require a future pipeline that surfaces one).
 func assembleImageResponse(turn *imageTurn, results []upstream.ImageResult) []byte {
 	data := make([]map[string]any, 0)
 	completionTokens := 0
 	for _, result := range results {
 		revised := result.RevisedPrompt
-		for i, img := range result.Images {
+		for _, img := range result.Images {
 			completionTokens += len(img.Data) / 4
-			entry := map[string]any{"revised_prompt": revised}
-			if turn.responseFormat == "url" && strings.TrimSpace(turn.cfg.BaseURL) != "" {
-				entry["url"] = strings.TrimRight(turn.cfg.BaseURL, "/") + "/images/" + turn.imageID + "-" + strconv.Itoa(i)
-			} else {
-				entry["b64_json"] = base64.StdEncoding.EncodeToString(img.Data)
-			}
-			data = append(data, entry)
+			data = append(data, map[string]any{
+				"revised_prompt": revised,
+				"b64_json":       base64.StdEncoding.EncodeToString(img.Data),
+			})
 		}
 	}
 	envelope := map[string]any{
@@ -435,12 +433,30 @@ func mapImageError(err error) *pluginabi.Error {
 }
 
 // ---------------------------------------------------------------------------
-// The single-chunk stream (host synthesizes SSE).
+// The single-chunk stream.
 // ---------------------------------------------------------------------------
 
-// emitImageSingleChunk emits the final images payload as exactly one chunk and
-// closes the downstream stream exactly once on every exit path (success or an
-// emit failure). The budget cancel is the last bound once emitted.
+// sseFrame wraps one payload as a data: SSE event ("data: <payload>\n\n"). The
+// host writes every emitted chunk VERBATIM into the text/event-stream body, so
+// image frames are framed exactly like the text executor's chat.completion.chunk
+// frames — a bare JSON blob would not parse as SSE.
+func sseFrame(payload []byte) []byte {
+	out := make([]byte, 0, len("data: ")+len(payload)+2)
+	out = append(out, "data: "...)
+	out = append(out, payload...)
+	return append(out, '\n', '\n')
+}
+
+// sseDoneSentinel is the OpenAI stream terminator, emitted as its own frame.
+var sseDoneSentinel = []byte("data: [DONE]\n\n")
+
+// emitImageSingleChunk executes the whole request non-streaming (by the caller)
+// and emits the final images payload as exactly ONE framed SSE event followed by
+// the [DONE] sentinel, closing the downstream stream exactly once on every exit
+// path (success or an emit failure). The registry host's image path
+// (streamOpenAICompatImages) has no SSE synthesis — the "host synthesizes SSE"
+// claim only holds for the built-in xAI route — so the framing is the plugin's
+// job, matching the text executor's documented chunk contract.
 func (m *Manager) emitImageSingleChunk(downstreamID string, payload []byte, cancelBudget context.CancelFunc) {
 	var closeOnce sync.Once
 	closeStream := func(msg string) {
@@ -450,9 +466,19 @@ func (m *Manager) emitImageSingleChunk(downstreamID string, payload []byte, canc
 		})
 	}
 	defer closeStream("")
-	if _, err := m.host.Call(pluginabi.MethodHostStreamEmit, streamEmitWire(downstreamID, payload)); err != nil {
-		closeStream("the downstream stream is unavailable")
+	emit := func(chunk []byte) bool {
+		if _, err := m.host.Call(pluginabi.MethodHostStreamEmit, streamEmitWire(downstreamID, chunk)); err != nil {
+			// The downstream bridge is gone (host aborted); stop emitting and
+			// close once with a static label — no payload material.
+			closeStream("the downstream stream is unavailable")
+			return false
+		}
+		return true
 	}
+	if !emit(sseFrame(payload)) {
+		return
+	}
+	emit(sseDoneSentinel)
 }
 
 // closeImageStreamOnce closes the downstream stream exactly once carrying the
@@ -472,12 +498,11 @@ func (m *Manager) closeImageStreamOnce(downstreamID, msg string, cancelBudget co
 
 // imageParsed is the decoded image request independent of its wire shape.
 type imageParsed struct {
-	prompt         string
-	size           string
-	quality        string
-	n              int
-	responseFormat string
-	references     []upstream.ReferenceImage
+	prompt     string
+	size       string
+	quality    string
+	n          int
+	references []upstream.ReferenceImage
 }
 
 // parseImagePayload dispatches by Content-Type: a multipart body is the host
@@ -493,16 +518,17 @@ func parseImagePayload(body []byte, contentType string, u upstream.Upstream, ctx
 // imageJSONPayload mirrors the OpenAI images request fields this executor
 // consumes. The image/mask sources are RawMessage so a present-but-null value
 // reads as absent and either a string or a string array is accepted.
+// response_format is deliberately NOT consumed: url mode is served as inline
+// b64_json (see assembleImageResponse), so the field is ignored.
 type imageJSONPayload struct {
-	Prompt         string          `json:"prompt"`
-	Size           string          `json:"size"`
-	Quality        string          `json:"quality"`
-	N              *int            `json:"n"`
-	ResponseFormat string          `json:"response_format"`
-	ImageURL       json.RawMessage `json:"image_url"`
-	Image          json.RawMessage `json:"image"`
-	MaskURL        json.RawMessage `json:"mask_url"`
-	Mask           json.RawMessage `json:"mask"`
+	Prompt   string          `json:"prompt"`
+	Size     string          `json:"size"`
+	Quality  string          `json:"quality"`
+	N        *int            `json:"n"`
+	ImageURL json.RawMessage `json:"image_url"`
+	Image    json.RawMessage `json:"image"`
+	MaskURL  json.RawMessage `json:"mask_url"`
+	Mask     json.RawMessage `json:"mask"`
 }
 
 func parseJSONImage(body []byte, u upstream.Upstream, ctx context.Context) (imageParsed, *pluginabi.Error) {
@@ -519,10 +545,6 @@ func parseJSONImage(body []byte, u upstream.Upstream, ctx context.Context) (imag
 	n, apiErr := imageCountPtr(payload.N)
 	if apiErr != nil {
 		return imageParsed{}, apiErr
-	}
-	responseFormat := payload.ResponseFormat
-	if responseFormat != "url" {
-		responseFormat = "b64_json"
 	}
 
 	refSources, apiErr := collectImageSources(payload.ImageURL, payload.Image)
@@ -550,20 +572,19 @@ func parseJSONImage(body []byte, u upstream.Upstream, ctx context.Context) (imag
 	}
 
 	return imageParsed{
-		prompt:         payload.Prompt,
-		size:           payload.Size,
-		quality:        payload.Quality,
-		n:              n,
-		responseFormat: responseFormat,
-		references:     references,
+		prompt:     payload.Prompt,
+		size:       payload.Size,
+		quality:    payload.Quality,
+		n:          n,
+		references: references,
 	}, nil
 }
 
 // parseMultipartEdits parses one host re-encoded edits multipart body: image[]
 // / images[] / image_url[] file parts become references, mask[] / mask[] parts
 // become masks (alpha-composited onto the matching reference by index), and
-// prompt / size / quality / n / response_format are plain form fields. Parts
-// are capped at 50MB and at most 10 images are accepted.
+// prompt / size / quality / n are plain form fields. Parts are capped at 50MB
+// and at most 10 images are accepted.
 func parseMultipartEdits(body []byte, contentType string, u upstream.Upstream, ctx context.Context) (imageParsed, *pluginabi.Error) {
 	_, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
@@ -576,13 +597,12 @@ func parseMultipartEdits(body []byte, contentType string, u upstream.Upstream, c
 	reader := multipart.NewReader(bytes.NewReader(body), boundary)
 
 	var (
-		references     []upstream.ReferenceImage
-		masks          [][]byte
-		prompt         string
-		size           string
-		quality        string
-		responseFormat string
-		nStr           string
+		references []upstream.ReferenceImage
+		masks      [][]byte
+		prompt     string
+		size       string
+		quality    string
+		nStr       string
 	)
 
 	for {
@@ -610,8 +630,6 @@ func parseMultipartEdits(body []byte, contentType string, u upstream.Upstream, c
 			quality = string(data)
 		case "n":
 			nStr = string(data)
-		case "response_format":
-			responseFormat = string(data)
 		case "image", "image[]", "images", "images[]", "image_url", "image_url[]":
 			imgData, mimeHint, derr := decodeImageSource(string(data), u, ctx)
 			if derr != nil {
@@ -641,9 +659,6 @@ func parseMultipartEdits(body []byte, contentType string, u upstream.Upstream, c
 	if apiErr != nil {
 		return imageParsed{}, apiErr
 	}
-	if responseFormat != "url" {
-		responseFormat = "b64_json"
-	}
 	references, apiErr = applyMasks(references, masks)
 	if apiErr != nil {
 		return imageParsed{}, apiErr
@@ -653,12 +668,11 @@ func parseMultipartEdits(body []byte, contentType string, u upstream.Upstream, c
 	}
 
 	return imageParsed{
-		prompt:         prompt,
-		size:           size,
-		quality:        quality,
-		n:              n,
-		responseFormat: responseFormat,
-		references:     references,
+		prompt:     prompt,
+		size:       size,
+		quality:    quality,
+		n:          n,
+		references: references,
 	}, nil
 }
 

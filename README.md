@@ -69,8 +69,9 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   `chatgpt-proxy`), `image-model-name` (default `gpt-image-2-proxy`),
   `codex-image-model-name` (default `codex-gpt-image-2`),
   `drawing-upstream-model` (default `gpt-5-5`), `thinking-effort`
-  (default `auto`), `base-url` (default empty — image `url` responses then
-  fall back to `b64_json`), `message-as-error` (default `true`),
+  (default `auto`), `base-url` (default empty — image responses are always
+  served as inline `b64_json` — see the image surface note below),
+  `message-as-error` (default `true`; see the image surface note below),
   `image-poll-timeout-secs` (default `120`), `image-poll-interval-secs`
   (default `10`), `request-timeout-secs` (default `600`), and
   `retry-401-refresh` (default `true`). Config parsing is fail-closed and
@@ -95,6 +96,24 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   (carrying `Retry-After`), `no_available_model` 404, `tools_unsupported`
   400, `model_unknown` 400, `no_assistant_content` 502 — a completed turn
   with no visible assistant message is always typed 502, never an empty 200.
+- Image executor surface (`openai-image`, the image surface note): the host's
+  `/v1/images/generations` and `/v1/images/edits` arrive at
+  `executor.execute` / `executor.execute_stream` untranslated and are routed by
+  model base name — `chatgpt-proxy/gpt-image-2-proxy` to the web-drawing
+  pipeline (sentinel acquired once per request), `chatgpt-proxy/codex-gpt-image-2`
+  to the codex pipeline (no sentinel, the stored plan). Two host-integration
+  constraints apply behind the registry host: (1) image responses are ALWAYS
+  served as inline `b64_json` — never a synthesized `url` — because the image
+  pipelines return only raw bytes and the host re-render passes any non-empty
+  `url` through verbatim, suppressing the host's own functional
+  `data:image/png;base64,...` fallback, so a synthesized url would hand the
+  client a dead link (`response_format:"url"` is therefore served as inline
+  base64; `base-url` does not change image output); and (2) `message-as-error:
+  false` makes the executor emit the prose as a byte-less `data[]` entry
+  (`revised_prompt` + warning `message`) per the executor contract, but the host
+  skips a byte-less entry and fails with `502` ("upstream did not return image
+  output"), so behind the registry host that setting degrades to a 502 rather
+  than surfacing the prose — use the default `true` for a clean typed 400.
 - Usage counts are a documented ESTIMATE (`bytes / 4` per message): the
   upstream never returns token counts for these turns, so `prompt_tokens` /
   `completion_tokens` / `total_tokens` are heuristic and must never be

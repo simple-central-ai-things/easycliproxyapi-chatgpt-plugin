@@ -168,11 +168,17 @@ one gateway port.
 3. Restart the host; the log must show
    `plugin registered plugin_id=easycliproxyapi-chatgpt-provider`.
 
+Deploy handoff: deployment into the gateway is via the model gateway repo's
+`easycli/` surface (see README Deploy).
+
 ## Conventions
 
 - English only; no Cyrillic (scan: `grep -rnP '[\x{0400}-\x{04FF}]'`)
 - Wire payloads to the upstream keep the reference's byte-identical
   fingerprint fields; golden-file tests pin them
+- Provenance: the upstream wire protocol is ported from the MIT reference
+  `basketikun/chatgpt2api`; a local read-only oracle clone is used during
+  development (see PROVENANCE.md)
 - No host-specific details in this public repo — placeholders and env var
   names only; real values live in the private ops doc
 - Commit identity `hello@babico.name.tr`; commit + push after every

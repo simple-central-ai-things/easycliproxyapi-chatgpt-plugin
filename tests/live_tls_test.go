@@ -179,7 +179,7 @@ func TestLiveTLS(t *testing.T) {
 		recordLeg(t, outB)
 		runnable = append(runnable, outB)
 	} else {
-		t.Log("leg (b) utls Chrome-110-era hello: utls leg unavailable in this build (rerun with -tags 'live utls' to link it)")
+		t.Log("leg (b) utls HelloChrome_106_Shuffle (closest first-handshake id to Chrome 110): utls leg unavailable in this build (rerun with -tags 'live utls' to link it)")
 	}
 
 	// The single deliberate gate: a 401 means the token is bad, not the

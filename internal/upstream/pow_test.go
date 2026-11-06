@@ -280,7 +280,7 @@ func TestMineProofFindsNonce(t *testing.T) {
 				t.Fatalf("proof token mismatch:\n got: %s\nwant: %s", token, v.ExpectedToken)
 			}
 			// Re-verify iteration order: decode the mined proof, recover the
-			// nonce at field 3 (field 4 is nonce>>1), then check the oracle
+			// nonce at index 3 (index 9 is nonce>>1), then check the oracle
 			// predicate for every attempt up to it.
 			payload, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(token, "gAAAAAB"))
 			if err != nil {

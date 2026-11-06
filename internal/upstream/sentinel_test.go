@@ -281,7 +281,7 @@ func TestSentinelWithPoWAndTurnstile(t *testing.T) {
 	}
 
 	// Reconstruct the hashed static pieces from the mined proof payload and
-	// verify the nonce is first-acceptable (fields 3 and 4 of the payload are
+	// verify the nonce is first-acceptable (indices 3 and 9 of the payload are
 	// the nonce pair; every other field is the config verbatim).
 	payload, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(tokens.Proof, "gAAAAAB"))
 	if err != nil {

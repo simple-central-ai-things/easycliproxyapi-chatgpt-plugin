@@ -84,8 +84,8 @@ func BuildLegacyRequirementsToken(config []any) (string, error) {
 // MineProof searches nonces i = 0, 1, 2, ... in the oracle's sequential
 // order for the first i whose proof JSON hashes below the difficulty bound,
 // and returns "gAAAAAB" + base64(proofJSON). The proof JSON is the 25-field
-// config with field 3 replaced by the nonce i and field 4 by i>>1 (config
-// fields 3 and 9 are otherwise dropped from the serialization — see
+// config with index 3 replaced by the nonce i and index 9 by i>>1 (config
+// entries 3 and 9 are otherwise dropped from the serialization — see
 // proofStaticPieces); the predicate is
 // sha3_512(seed + base64(proofJSON))[:len(difficulty)/2] <= bytes.fromhex(difficulty).
 //

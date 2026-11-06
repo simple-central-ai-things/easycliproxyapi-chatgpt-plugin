@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -322,14 +323,24 @@ func newDirectUpstream(cfg model.Config, proxyURL string, utlsPending bool) (*di
 	return &directUpstream{client: &http.Client{Transport: transport}, utlsPending: utlsPending}, nil
 }
 
+// warnProxyFallbackOnce emits the invalid-proxy warning at most once per
+// process: the transport is rebuilt per request, so a plain log call would
+// turn one misconfiguration into request-path noise.
+var warnProxyFallbackOnce sync.Once
+
 // proxyFunc returns the client proxy function: the configured proxy URL when
-// given, otherwise the process environment (http_proxy etc.).
+// given, otherwise the process environment (http_proxy etc.). A malformed
+// configured URL keeps the environment fallback and logs once that the URL
+// was invalid — never the URL itself (it may carry credentials).
 func proxyFunc(proxyURL string) func(*http.Request) (*url.URL, error) {
 	if strings.TrimSpace(proxyURL) == "" {
 		return http.ProxyFromEnvironment
 	}
 	target, err := url.Parse(proxyURL)
 	if err != nil {
+		warnProxyFallbackOnce.Do(func() {
+			log.Printf("chatgpt-proxy: configured proxy URL is invalid; environment proxy settings applied")
+		})
 		return http.ProxyFromEnvironment
 	}
 	return func(*http.Request) (*url.URL, error) { return target, nil }

@@ -13,9 +13,11 @@ package plugin
 // reusing the Task 12 refresh+persist seams.
 //
 // Streaming image requests execute non-streaming and emit a SINGLE final
-// payload chunk then close once: the host synthesizes SSE for registry-typed
-// models (streamImagesWithModel), so chunk fidelity only needs the final
-// payload — only the last envelope is emitted, never per-image deltas.
+// payload chunk then close once: the executor emits the framed SSE itself
+// (`data: <payload>\n\n` followed by `data: [DONE]\n\n`, see
+// emitImageSingleChunk), because the registry host's image path has no SSE
+// synthesis — so chunk fidelity only needs the final payload — only the last
+// envelope is emitted, never per-image deltas.
 //
 // The pipeline entry points are lifted to package vars (imageAcquireSentinel /
 // imageGenerate / imageGenerateCodex) so the offline tests swap in scripted

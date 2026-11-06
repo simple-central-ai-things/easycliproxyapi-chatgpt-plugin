@@ -37,7 +37,7 @@ func TestConfigDefaults(t *testing.T) {
 				t.Errorf("ThinkingEffort = %q, want auto", c.ThinkingEffort)
 			}
 			if c.BaseURL != "" {
-				t.Errorf("BaseURL = %q, want empty (b64_json fallback)", c.BaseURL)
+				t.Errorf("BaseURL = %q, want empty (reserved key; images are always inline b64_json)", c.BaseURL)
 			}
 			if !c.MessageAsError {
 				t.Errorf("MessageAsError = false, want true")

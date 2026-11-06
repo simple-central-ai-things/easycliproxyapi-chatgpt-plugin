@@ -78,7 +78,9 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
 
 The contract matrices below are pinned by `internal/plugin/matrix_test.go`:
 CI fails when a documented matrix and the actual dispatcher, identity or
-config surface disagree in either direction.
+config surface disagree in either direction — the error classes matrix is
+the exception: it is pinned one-directionally, each documented row against
+the code.
 
 - Plugin identity (pinned by `internal/plugin/plugin_test.go`):
   `name=easycliproxyapi-chatgpt-provider`, `version=0.1.0`, provider key
@@ -162,7 +164,8 @@ config surface disagree in either direction.
   refresh token, so an unpersisted refresh would break the host's next
   scheduled `auth.refresh`); a failed refresh, a failed save, or a second
   `401` ends in typed `401 invalid_token`.
-- Error classes (pinned by `matrix_test.go`; "dispatch" pins drive the
+- Error classes (pinned one-directionally by `matrix_test.go` — each
+  documented row against the dispatcher; "dispatch" pins drive the
   registered Manager offline against a fake host, "error-map" pins drive
   the upstream error mapping with the upstream's own typed errors):
 
@@ -245,8 +248,10 @@ artifact.
    bind-mounted into the gateway container, so a restart picks it up with no
    image rebuild.
 3. Ensure the live `config.yaml` carries the plugin block; SCPM renders it
-   from `easycli/config.yaml.template` (`bash easycli/deploy.sh` re-renders
-   and restarts the gateway only when the config changed):
+   from `easycli/config.yaml.template`. An existing `config.yaml` stays
+   panel-owned, so `bash easycli/deploy.sh` installs the rendered config only
+   when the file is missing (first deploy) or with `--force-config` (keeps a
+   rollback copy and clobbers panel edits):
 
    ```yaml
    plugins:

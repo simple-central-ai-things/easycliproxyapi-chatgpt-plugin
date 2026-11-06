@@ -4,8 +4,10 @@ package plugin
 // dispatcher, identity, and config surface (the commandcode-plugin
 // matrix_test.go precedent). The README is the operator-facing contract;
 // these tests fail when a documented matrix and the code disagree in
-// either direction, so a dispatcher change and its README update land in
-// the same change or CI goes red.
+// either direction — except the error matrix, which is pinned
+// one-directionally (each documented row against the code) — so a
+// dispatcher change and its README update land in the same change or CI
+// goes red.
 
 import (
 	"encoding/json"
@@ -310,10 +312,13 @@ func TestDocumentedConfigMatrixMatchesParseConfig(t *testing.T) {
 }
 
 // TestDocumentedErrorMatrixMatchesDispatch pins the error code matrix:
-// every row's code and HTTP status must be exactly what the dispatcher
-// (rows pinned by "dispatch") or the upstream error mapping (rows pinned by
-// "error-map") produces offline. Unknown codes or pins fail — a new error
-// class must land with its matrix row.
+// each documented row's code and HTTP status must be exactly what the
+// dispatcher (rows pinned by "dispatch") or the upstream error mapping
+// (rows pinned by "error-map") produces offline; unknown codes or pins
+// fail. The pinning is one-directional — a new code error class has no
+// row to fail against — and the lifecycle/transport classes
+// (invalid_config, plugin_error, model_failure) are intentionally out of
+// scope.
 func TestDocumentedErrorMatrixMatchesDispatch(t *testing.T) {
 	m := newTestManager(t)
 	registerForMatrix(t, m) // defaults must be served before executor turns resolve models

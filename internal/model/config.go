@@ -26,9 +26,11 @@ const (
 	tlsModeUtls              = "utls"
 )
 
-// Config is the validated plugin configuration. An empty BaseURL means image
-// url responses fall back to b64_json; MessageAsError true means a drawing
-// turn that replies with prose is surfaced as an error, not a silent 200.
+// Config is the validated plugin configuration. BaseURL is accepted but
+// reserved — image responses are always inline b64_json regardless of its
+// value (a real resolvable url would require a future pipeline that surfaces
+// one); MessageAsError true means a drawing turn that replies with prose is
+// surfaced as an error, not a silent 200.
 // Declared here (not in internal/plugin) because internal/upstream consumes
 // it too; internal/plugin aliases the type.
 type Config struct {

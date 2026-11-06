@@ -18,6 +18,14 @@ package upstream
 //     (both languages agree), but the FORMAT boundary differs: Python uses
 //     scientific notation below 1e-4 and at 1e16+, Go's encoder below 1e-6
 //     and at 1e21+. The fixtures pin the window between them.
+//
+// Fixture-unreachable repr edge divergences (the golden fixtures never hit
+// them, so the port keeps its simpler rule):
+//
+//   - pyReprEscape emits \0 for a NUL byte, where Python's repr emits \x00.
+//   - pyReprString's quote choice ignores escape-minimization when the
+//     string has both a backslash and the preferred quote; Python repr
+//     would switch quotes to avoid the extra escape.
 
 import (
 	"bytes"

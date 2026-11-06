@@ -211,6 +211,9 @@ func codexReferenceDataURL(ref ReferenceImage) string {
 	if mime == "" {
 		mime = defaultReferenceMimeType
 	}
+	// Intentional divergence: the oracle hard-codes a data:image/png label
+	// for non-data-URL inputs; honoring the reference's real mime (falling
+	// back to image/png) is strictly-more-correct and fixture-invisible.
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(ref.Data)
 }
 

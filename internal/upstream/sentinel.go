@@ -341,6 +341,10 @@ var (
 )
 
 // parsePowResources is the differential port of pow.py parse_pow_resources.
+// One fixture-unreachable divergence: the port matches <script src=...>
+// case-sensitively, while the oracle's html.parser lowercases tag and
+// attribute names (so <SCRIPT SRC=...> also matches it); the fixtures never
+// carry an upper-cased tag, so the port keeps the simpler match.
 func parsePowResources(html string) ([]string, string) {
 	type srcMatch struct {
 		start int

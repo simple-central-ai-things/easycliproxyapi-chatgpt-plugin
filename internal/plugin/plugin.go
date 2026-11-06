@@ -20,15 +20,18 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
+
+	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/model"
 )
 
 // Identity constants. The pluginID is the .so basename and the registration
-// Name; providerKey is the auth-file type, the model prefix and the routing
-// identity; githubRepo satisfies the host validPlugin gate (it rejects an
-// empty Metadata.GitHubRepository) and is the URL a plugin store polls.
+// Name; providerKey aliases the canonical model.ProviderKey (the auth-file
+// type, the model prefix and the routing identity); githubRepo satisfies the
+// host validPlugin gate (it rejects an empty Metadata.GitHubRepository) and is
+// the URL a plugin store polls.
 const (
 	pluginID      = "easycliproxyapi-chatgpt-provider"
-	providerKey   = "chatgpt-proxy"
+	providerKey   = model.ProviderKey
 	pluginVersion = "0.1.0"
 	githubRepo    = "https://github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin"
 )

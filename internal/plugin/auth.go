@@ -11,6 +11,7 @@ import (
 	"path"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
@@ -324,8 +325,9 @@ func oauthTokenError(status int, body []byte) error {
 
 // oauthErrorDetail extracts the provider's own detail text from a rejected
 // token response (error_description, then error, then message, then the raw
-// body, capped). Our token material never appears in the reply, so the
-// detail is safe to surface in error messages.
+// body). Our token material never appears in the reply, so the detail is safe
+// to surface in error messages — but it is upstream-controlled, so control
+// runes are dropped and the result rune-capped before it is persisted.
 func oauthErrorDetail(body []byte) string {
 	var rejected struct {
 		Error     string `json:"error"`
@@ -343,10 +345,31 @@ func oauthErrorDetail(body []byte) string {
 	if detail == "" {
 		detail = strings.TrimSpace(string(body))
 	}
-	if len(detail) > 300 {
-		detail = detail[:300]
+	return capText(dropControl(detail), 300)
+}
+
+// dropControl strips control and non-printable runes from upstream-controlled
+// text (a provider error field) before it is persisted: the provider can
+// answer with arbitrary bytes, and a persisted diagnostic must not carry
+// control bytes.
+func dropControl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// capText truncates s to at most limit runes. It is rune-safe: a byte slice
+// at a rune boundary would leave a partial UTF-8 sequence that persists as
+// U+FFFD mojibake in diagnostics and poll replies.
+func capText(s string, limit int) string {
+	runes := []rune(s)
+	if len(runes) <= limit {
+		return s
 	}
-	return detail
+	return string(runes[:limit])
 }
 
 func recordRefreshFailure(cred Credential, at time.Time, message string) Credential {

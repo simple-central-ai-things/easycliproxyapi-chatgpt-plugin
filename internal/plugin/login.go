@@ -439,8 +439,5 @@ func (m *Manager) verifyLoginAccount(callbackID string, tokens loginTokens) plug
 }
 
 func capLoginMessage(message string) string {
-	if len(message) > loginMessageCap {
-		return message[:loginMessageCap]
-	}
-	return message
+	return capText(message, loginMessageCap)
 }

@@ -1,0 +1,111 @@
+[
+  {
+    "name": "legacy-pinned-001",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",
+    "script_sources": [
+      "https://chatgpt.com/backend-api/c/deadbeef/_cafe/chunk.js",
+      "https://chatgpt.com/assets/vendor.js"
+    ],
+    "data_build": "c/deadbeef/",
+    "config": [
+      3000,
+      "Fri Nov 06 2026 12:34:56 GMT-0500 (Eastern Standard Time)",
+      4294705152,
+      1,
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",
+      "https://chatgpt.com/backend-api/c/deadbeef/_cafe/chunk.js",
+      "c/deadbeef/",
+      "en-US",
+      "en-US,es-US,en,es",
+      0.6175329674012319,
+      "appCodeName−Mozilla",
+      "_reactListening5dehydibo78",
+      "location",
+      1234567.0,
+      "00000000-0000-4000-8000-000000000000",
+      "",
+      32,
+      1699998765433.0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "expected_token": "gAAAAACWzMwMDAsIkZyaSBOb3YgMDYgMjAyNiAxMjozNDo1NiBHTVQtMDUwMCAoRWFzdGVybiBTdGFuZGFyZCBUaW1lKSIsNDI5NDcwNTE1MiwxLCJNb3ppbGxhLzUuMCAoV2luZG93cyBOVCAxMC4wOyBXaW42NDsgeDY0KSBBcHBsZVdlYktpdC81MzcuMzYgKEtIVE1MLCBsaWtlIEdlY2tvKSBDaHJvbWUvMTQzLjAuMC4wIFNhZmFyaS81MzcuMzYgRWRnLzE0My4wLjAuMCIsImh0dHBzOi8vY2hhdGdwdC5jb20vYmFja2VuZC1hcGkvYy9kZWFkYmVlZi9fY2FmZS9jaHVuay5qcyIsImMvZGVhZGJlZWYvIiwiZW4tVVMiLCJlbi1VUyxlcy1VUyxlbixlcyIsMC42MTc1MzI5Njc0MDEyMzE5LCJhcHBDb2RlTmFtZeKIkk1vemlsbGEiLCJfcmVhY3RMaXN0ZW5pbmc1ZGVoeWRpYm83OCIsImxvY2F0aW9uIiwxMjM0NTY3LjAsIjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMCIsIiIsMzIsMTY5OTk5ODc2NTQzMy4wLDAsMCwwLDAsMCwwLDBd"
+  },
+  {
+    "name": "legacy-nonascii-002",
+    "user_agent": "Mozilla/5.0 (Téléphone; CDMA) AppleWebKit/537.36",
+    "script_sources": [
+      "https://chatgpt.com/backend-api/sentinel/sdk.js"
+    ],
+    "data_build": "",
+    "config": [
+      3000,
+      "Fri Nov 06 2026 12:34:56 GMT-0500 (Eastern Standard Time)",
+      4294705152,
+      1,
+      "Mozilla/5.0 (Téléphone; CDMA) AppleWebKit/537.36",
+      "https://chatgpt.com/backend-api/c/deadbeef/_cafe/chunk.js",
+      "c/deadbeef/",
+      "en-US",
+      "en-US,es-US,en,es",
+      0.6175329674012319,
+      "appCodeName−Mozilla",
+      "_reactListening5dehydibo78",
+      "location",
+      1234567.0,
+      "00000000-0000-4000-8000-000000000000",
+      "",
+      32,
+      1699998765433.0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "expected_token": "gAAAAACWzMwMDAsIkZyaSBOb3YgMDYgMjAyNiAxMjozNDo1NiBHTVQtMDUwMCAoRWFzdGVybiBTdGFuZGFyZCBUaW1lKSIsNDI5NDcwNTE1MiwxLCJNb3ppbGxhLzUuMCAoVMOpbMOpcGhvbmU7IENETUEpIEFwcGxlV2ViS2l0LzUzNy4zNiIsImh0dHBzOi8vY2hhdGdwdC5jb20vYmFja2VuZC1hcGkvYy9kZWFkYmVlZi9fY2FmZS9jaHVuay5qcyIsImMvZGVhZGJlZWYvIiwiZW4tVVMiLCJlbi1VUyxlcy1VUyxlbixlcyIsMC42MTc1MzI5Njc0MDEyMzE5LCJhcHBDb2RlTmFtZeKIkk1vemlsbGEiLCJfcmVhY3RMaXN0ZW5pbmc1ZGVoeWRpYm83OCIsImxvY2F0aW9uIiwxMjM0NTY3LjAsIjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMCIsIiIsMzIsMTY5OTk5ODc2NTQzMy4wLDAsMCwwLDAsMCwwLDBd"
+  },
+  {
+    "name": "legacy-edges-003",
+    "user_agent": "Mozilla/5.0 (Téléphone; CDMA) AppleWebKit/537.36",
+    "script_sources": [
+      "https://chatgpt.com/backend-api/sentinel/sdk.js"
+    ],
+    "data_build": "c/deadbeef/",
+    "config": [
+      3000,
+      "Fri Nov 06 2026 12:34:56 GMT-0500 (Eastern Standard Time)",
+      4294705152,
+      1,
+      "Mozilla/5.0 (Téléphone; CDMA) AppleWebKit/537.36",
+      "https://chatgpt.com/backend-api/sentinel/sdk.js",
+      "c/deadbeef/",
+      "en-US",
+      "en-US,es-US,en,es",
+      1e-05,
+      "language−zh-CN",
+      "location",
+      "window",
+      0.0001,
+      "00000000-0000-4000-8000-000000000000",
+      "",
+      8,
+      1e+16,
+      1.0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "expected_token": "gAAAAACWzMwMDAsIkZyaSBOb3YgMDYgMjAyNiAxMjozNDo1NiBHTVQtMDUwMCAoRWFzdGVybiBTdGFuZGFyZCBUaW1lKSIsNDI5NDcwNTE1MiwxLCJNb3ppbGxhLzUuMCAoVMOpbMOpcGhvbmU7IENETUEpIEFwcGxlV2ViS2l0LzUzNy4zNiIsImh0dHBzOi8vY2hhdGdwdC5jb20vYmFja2VuZC1hcGkvc2VudGluZWwvc2RrLmpzIiwiYy9kZWFkYmVlZi8iLCJlbi1VUyIsImVuLVVTLGVzLVVTLGVuLGVzIiwxZS0wNSwibGFuZ3VhZ2XiiJJ6aC1DTiIsImxvY2F0aW9uIiwid2luZG93IiwwLjAwMDEsIjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMCIsIiIsOCwxZSsxNiwxLjAsMCwwLDAsMCwwLDBd"
+  }
+]

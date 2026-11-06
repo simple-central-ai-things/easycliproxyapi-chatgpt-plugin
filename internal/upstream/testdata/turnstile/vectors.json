@@ -1,0 +1,223 @@
+[
+  {
+    "name": "t01-literal-copy",
+    "p": "synthetic-p-01",
+    "dx": "KCJcWEhURFlPDVJFVV0fFkwpREUvUU8NQR0BHVNIXkQ1SVQyUQFQHAADX1lMHA0JGAZBcFwNawNfWV9HWUlUSxcdQQBfWlEkQlQzV0RFQxxAHBwRQklcWEhWWElSHkFwbQ==",
+    "expected_token": "dDAxLW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t02-int-nan",
+    "p": "synthetic-p-02",
+    "dx": "KCJcWEhURFlPDUQfbR5TIlxYSFREWE8NRB5tHlMiXFhIVERbTw1EH20eUyJbWEhURFtPDUEdAW9fWTVGREVFWVABUA9+Uz1bM1hIPkZFQxxDHxwSUQ1eRkUKH0s+AVB2AgJfWV9EWklUWFMeXA0DHlNIXUY1OA==",
+    "expected_token": "dDAyLW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t03-xor",
+    "p": "synthetic-p-03",
+    "dx": "KCJcWEhURFlPDVJMUlBRJEJUM1dYSVIdQQEQERccCFY1SVQyUQFQHAABX1lMFQoGVjRPDSscHBNCSVxYSFREWD4BUHYCH1NIXkdERVY1Fh1AHQVvBkleRF85AVlTHUUPbR9TIlxYSFRHWk8NUlkAABJUAR9KOFhJOB9AARACQ0tCVFlVR0VDHlwNAQBAJEJUM1dYSVIdRAEQERIbDVY1SVQyUgFQHAAHX1lfQjVJVDJRAVAcAAZfWUwoHVVEWFFxBR0AAhElHFY1SVQyUQFQHAMHX1lMAFhWWQYIDy0BEGhBSUJUWVVARUMcQBgcE0BVTkVbUSk0",
+    "expected_token": "dDAzLW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t04-concat",
+    "p": "synthetic-p-04",
+    "dx": "KCJcWEhURFlPDVJLX1tRJEJUM1dYSVIdQQEQBV1MM1hIPkZFQxxAHxwUUR8BG0o4WEk4GFwNAQRBVU5FWFQpRUN2QgEQBUNKQlRKAxsGUgNFD20YUyJcWEhUR1xPDVJZAAASVAEfSjhYSTgfQAEQBUNLQlRZVUdFQx5cDQEHRiRCVDNXWElSHUQBEG8uJEJUM1dYSVIdRQEQFgtbM1hIPkFFQxxAGRwUQklbKURFL1xPDUEdBBhTSF5BNUlUMlEBUBwAAl9ZNVYQR1hJQVVScG0YUyJcWEhUR19PDVJZAAARVAEfSjhYSTgfQAEQBUNNQlRZVUJFQx5cDQEHRSRCVDNXWElSHUcBEBYRGBxWNUlUMlEBUBwADF9ZTBYJF1Y0Tw0rGBwUQklWWEhURF0+AVB2AhhTSF5NREVWCwJfCAFIFi5VTi9aSVRYUBpcDRJAQ00NWQcOVjRPDSsfABhTSF5MREVFWVoBUB4cFEJKWSlERS9bTw1BHAAYUw0cAQ04WEk4H1wNAQVCVU4AGhARNE8NKxgcFEJIX1hIVERePgFQdgIYU0hfRkRFVj0RWBVPUUZRJEJUM1dYSVIeSAEQFgdJWlkHDlY0Tw0rHwAYU0hfRURFRVhRAVAeHBRCSlYpNQ==",
+    "expected_token": "dDA0LW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t05-dotted",
+    "p": "synthetic-p-05",
+    "dx": "KCJcWEhURFlPDVJaWVsXFhlaDAoXHA5IHlkSaF9ZNUZERUVZUgFQD1xaEBgaHQcLVjRPDSsbHBVCSVxYSFREWU8NQR0BaF9ZNUZERUVZUAFQD1hBBwkdTkdKFwECWRddRBsQFgNbSjhYSTgfXA0BBkpVTlYcVUEITkIbD20ZUyJcRERFRVlRAVAcAAZfWV1YSFRHUD4BUHYCGVNIXkBERVYIE11ScBwVKEtCVFlVQUVDDxNFUUFRJEJUM1dARUMcQBscFUJJWlhIVERcPgFQdgIZU0heQ0RFVggTXV5OWFQHWzNYSD5GRUMcRB0cFVENXkFFCh9LPgFQdgIFX1lfRF5JVFhTGlwNAxlTSFpENTg=",
+    "expected_token": "dDA1LW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t06-omap",
+    "p": "synthetic-p-06",
+    "dx": "KCJcWEhURFlPDVJaWVgXFhlaJwceDABZXk5CUxINC1Y1SVQyUhpcDQEGQlVORVhVKUVDdkIBEAdDS0JUShIdBwdCBwNiUxUVCxccSwcMFw8tARBtQVVORVhWWElBRkEPbRpTIlxYSFREXU8NUlsBFC5VTi9fSVRYUx9cDQEGQlVORVhWWElSHURwHBYoS0JUWVVBRUMPGxwSa19ZNUZERUVZVQFQD0YEUSRCVDNSWElSHUIBEAdDSEJUWVVBRUMcQBttGlMiXFhIVEReTw1SRgIULlVOL1pJVFhTFVwNEkFRJEJUM1JYSVIdQgEQB0NIQlRZVUNFQxxAFW0aUyJcWEhURFBPDVJaWVgXFhlaOgASBQZOBANDUwdbM1hIPkNFQxxAFBwWQklfWEhURFo+AVB2AhpTSF9EREVWHgpDFEJHGDwbBBELEVoKEUgRWVUULlVOL1lSWElSHEEBEAdCSTNYSD5HRUMPBB0GGxwSTCk1",
+    "expected_token": "dDA2LW9r",
+    "oracle_null": false,
+    "expected_omap_adds": [
+      [
+        "k1",
+        "v1"
+      ],
+      [
+        "k1",
+        "v2"
+      ],
+      [
+        "k2",
+        "w"
+      ]
+    ]
+  },
+  {
+    "name": "t07-json",
+    "p": "synthetic-p-07",
+    "dx": "KCJcWEhURFlPDVJWbBUSJUxOSFRYST8PEnESDVMiGgYdAFhJDVgcQRwXL1sWVBE5VjRPDSwPU2tRQ04PNEcONUEXUB8eAl9ZMlYROVZTQx0NUBJqX1k1RVxJVFhTHFwNAQdDJEJUM1dYSVIdQgEQTFEYTE5IVFhJQU9SFxBsBwsbEURFGhwPQVwNEk9TAEwpREVWCkEXUFYSTVFDTkZGUFhJQVRSFxAHDgQzWEg+RkVDHEQcHBdRDV5DCUgbAkFwXA1rBUNVTkVYVFhJUh1CARAEX1lfQFk4WEk4HEUBEAZDSkJUWVVFNE8NKx8cF0JJWlhIRw81QUwsDwoXQlVOKEoHKEtZDStZQkIWVU4aHQkYRUNxUlUQTi9bM1hIOVYKPw9KDUtrUQMyVlJFRkdWAVBxEk4vW1RUWBgJSz4BUHYCG1NIWkZERVYdUxpdQlsVLlVOL1pVWElSHUMBEAZDTUJUW0lUWFcfLXA=",
+    "expected_token": "dDA3LW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t08-b64",
+    "p": "synthetic-p-08",
+    "dx": "KCJcWEhURFlPDVJMd24AGylMDwFGUBpPN3wNGi5VTi9aSVRYUxxcDRJZNC8dFi9dEw1RFAlPd2lOWzNYSD5FUU8NQR0BZV9ZNUZERUVZUQFQD1hdHxUBVB8KBgUHDy0BEGNBVU5FXFZYSUFZQBVRFRwSTClERS9bUwFQHAAJX1lfRFpJVFpPDUEZA2VfWTVGREVFWVABUA9YUVMNBhEaAFY0Tw0rHxwYQklaWEhHHABDWRhIQl1RJEJUM1RNRUMcQBltFFMiXFhIVERcTw1STHdTFB0pHAQGGTxeDy0BEGNBVU5FXFFYSUFZQBUdVxhbM1hIPkZZTw1BHQQUU0heQURFR0VDHEQZbWU=",
+    "expected_token": "dDA4LW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t09-specials",
+    "p": "synthetic-p-09",
+    "dx": "KCJcWEhURFlPDVJaWVcXFhlaJQQAAUFwXA1rC19ZX0RZSVRLFEQeSV9OXTQPAABHKUVDdkEUHBlCSV8pREUvW08NQR0CFVNbOUZRDBUENUcUbnJ3KiE8GzA0SVRBcFwNawtfWV9AXUlUSxcdSUwdVhhbM1hIPkZZTw1BHQEVU0heRkRFR0VDHEQYbRVTIlxYSFREWk8NUlpZVxcWGVonBx4MAFlScBwZKEtCVFlVQEVDDwdEXl0cDkA7Cg8RChcPLQEQYkJAQlRZVUA0Tw0rHxwZQklbWEhHLgc1WCkeYkkRS1oTPFc+GDl6Ph17ehgeCw0qBxYEJR0RdWpVOj4gAjIiIg0qZUAQEmRfWTVGREVFXVUBUA9ECUobQxsDRylFQ3ZCHRwZQklaWEhURFxPDUMBEAhHTzNYSD5GRUMcQBscGShbD1ZERVYLQQFQD1MbLiRCVDNXWElSHUcBEGJRGExYSEcWS08NUk4SZC5VTi9ZXFhJUh1HcBwZKEtCVFlVTEVDDyl+SFA/PiNJSjhYSTgfXA0BDURVTlYcVU0KTkIbD20VUyJcRERFRVlUAVAcAAFfWV1YSFRAXj4BUHYCFVNIXk1ERVYZD0wZQxBKBwsHGg9HKUVDdkIBEAhCSUJUShUYCApDUF5ESxoXCVY1SVQyUhRcDQEIQyRCVDNXWElSHEEBEBsQPhYcCTJADgAeIlRRbkYXTClERS9bTw1BGQgVU1saRFEBWQYIDy0BEGJBSUJUWVRERUMcQRwcGUBVTkVcXSlFQ3ZCARAIQktCVFxXKUVDdkIBEAhCSkJUXFcpRUN2QRQcGUJIXSlERS9bTw1BHAQVU1sgMCFYVjRPDSsfHBlCTVdYSEcAWVpIXUJbGy5VTi9aVVhJUhxDARAIQk1CVFtJVFhXFC0BEGJBVU5FWVBYSVIDRXAcGShLQlRZVEJFQxxeGG0VUyJfTURFRVhVcFwNawtfWV9FX0lUSy5+RBwSZF9ZNUZERUVcUwFQD0QJSlQBH0o4WEk4H0ABEAhCT0JUWVRDRUMeXA0BDEMkMw==",
+    "expected_token": "dDA5LW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t10-object-keys",
+    "p": "synthetic-p-10",
+    "dx": "KCJcWEhURFlPDVJaWF4XFhlaJwceDABZXkZUSQBbM1hIPkZFQxxAHB0QUQ4HGgwKA0cPQhNMXWMHFhwVDwBWNE8NKxwGHFNIXkZERUVZUwFQHAEBLlVOL1pJVFhTHlwNahIgLS8gOywzNi9iM2x9byAtISYpIjE2KmMkaGN+MjUxJzwqJiw8e0QPHRBRKjo1PDY9LjxhP25wfCwqOjs6JDMsPH4kbHN8NiYnMEpJVEsAQRlIX0ReGgEGGgAYCBdIFABCVRALCwBKSVRLDEwZAlBAAwpBFwkVMRETRAJIQnEHW0JUSgoVAE5JGUkTHFNbPSApMScgJHI8YnJxPyY9ICc3NS4mcjxidnc6NykrOiAlPCZ+JA8dEFEsByccBAAMTUQDY1BGGh4PAAEKGioMQRxMQUMWHUBFSjgpRUN2QgERAUZIQlRKEUVZTkIbD2wcUyJcRERFRVlRAVAcAQNfWV1YSFRBWD5w",
+    "expected_token": "dDEwLW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t11-callables",
+    "p": "synthetic-p-11",
+    "dx": "KCJcWEhHFgwXTFIBERMRAEMfDRxWNE8NKx8dEUJJXVhIRxUFE0URD2wdUyJcWEhURF1PDVJPVEUSWzNYSD5DRUMVXA0AAUBVTkVYUSlFQ3ZCAREAQ0xCVEpHKUVDdkUBEQBDTEJUSgQYGQtMUnAdEShLQlRZVUJFQw8SVBxaFgBMKURFL1tPDUEYAx1TWxpFWQRZBggPLQERakFJQlRZVUFFQxxAGx0RQFVORV1XKUVDdkIBEQBDTkJUSh1WNE8NKx8dEUJJVlhIRw1LPgFQdgAGX1lfRFFJVFtPDUEdBh1TSF5MNUlUMlEBUBwAAV9ZAAEECSlFQ3ZCAREARkpCVEoRRVhOQhsPbB1TIlxEREVFWVoBUBwAAV9ZXVhIVEFaPnA=",
+    "expected_token": "dDExLW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t12-rawcall",
+    "p": "synthetic-p-12",
+    "dx": "KCJcWEhURFlPDVJKRFMBHUwpREUvW1ABUBwBAl9ZXVhIRwBYUQAfRhNvLg==",
+    "expected_token": "dDEyLW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t13-noop",
+    "p": "synthetic-p-13",
+    "dx": "KCJcRTVJVDJRHFwNE1oUFwEGDQFWRUMcQh5sH1MiXFhIVERZTw1SXBNuX1k1RkRFRVlSAVAPQBEuVU4vWklUWFYZXA0TR0JKQxsDRylFQ3ZCHR0TQkleWEhURFhPDUMBEQJGTTMp",
+    "expected_token": "dDEzLW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t14-random-branches",
+    "p": "synthetic-p-14",
+    "dx": "KCJcWEhURFlPDVJaWFoXFhlaGAAGDwxfHUxfVxZXABsfRylFQ3ZBGh0UQklfWEhURFk+AVB2AxhTSF5GREVWHgpDFEJGGj4YGhxGFxUHB0IdD2wYUyJfQ0RFRVlQAVAcAQYuVU4vWklUWFMZXA0TU1EkQlQzV1hJUh1FAREWFFszWEg+RkVDHEUYHRRRDV9ARQofSz4BUHYDBF9ZX0RcSVRYUxhcDQIYU0hbQTU4",
+    "expected_token": "dDE0LW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t15-datanodes",
+    "p": "synthetic-p-15",
+    "dx": "KCJWWEhURFlPDUEdbBlTIlxYSFREWE8NUlpYWxcWGVY1SVQyUQFQHAQDX1lMAFlQFUQMRlJwHRUoS15YSFREWU8NQR0AGVNKQlRZUEI0Tw0rHx0VQklcWEhHAwANSR9aE2hfWTVFREVFWVEBUBwHaF9ZNUZERUVZUAFQD21AQ0leQDQQRFlSHSxYAQVDSTIBWFVFWT9YQB0BAi8MXkRZV1Y0Tw0rHx0VQkxZWEhHAFhWAB9GE2hfWTVGWElUWFMfXA0ABUBVTkdERUVcVHAt",
+    "expected_token": "dDE1LW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t16-empty-p",
+    "p": "",
+    "dx": "W1syLCAxMDAsICJhYmMiXSwgWzIsIDEwMSwgImRlZiJdLCBbMiwgMTAyLCAiYWJjIl0sIFsxLCAxMDIsIDEwMV0sIFsyLCAxMDMsICJcdTAwMDVcdTAwMDdcdTAwMDUiXSwgWzIsIDE1OCwgInQxNi1vayJdLCBbMjAsIDEwMiwgMTAzLCAzLCAxNThdXQ==",
+    "expected_token": "dDE2LW9r",
+    "oracle_null": false
+  },
+  {
+    "name": "t17-eq-semantics",
+    "p": "synthetic-p-17",
+    "dx": "KCJcWEhURFlPDQRfRFIuVU4vWklUWFMcXA0Aal9ZNUZERUVcWgFQD0UGRBhDGwNHKUVDdkIdHRdCSV5YSFREWE8NQwERBkZAM1hIPkZFQxxAHx0XQldeKURFL1tPDUEdAhtTSDNYSD5GRUMcRh0dF1ENX0MKSBsCQXBcDWoFQ1VORVhXWElSHUMBEQRfWV9CWDhYSTgfXA0AB0dVTi9KBFZFQxwtcB0XKEtCVFlVQUVDdlJMExtTSDMpREUvW08NQRsAG1NbGkVfBlkGCA8tARFsQUlCVFlVQEVDHEAYHRdAVU5FXlQpRUN2QgERBkNPQlQGEBgFPgFQdgMbU0heQ0RFGhwPQS0BEWxBVU5FXldYSUFZQRpVGhwSTClERS9bUwFQHAEBX1lfRF9JVFpPDUEbA2pfWTVGREVFWVsBUA8AFS5VTi9aSVRYUxRcDQBqX1k1RkRFRV9QAVAPRQZEHEMbA0cpRUN2Qh0dF0JJVlhIVERQTw1DAREGRUozKQ==",
+    "expected_token": "dDE3ZC1vaw==",
+    "oracle_null": false
+  },
+  {
+    "name": "n01-no-result",
+    "p": "synthetic-p-20",
+    "dx": "KCJcWEhURFlPDVJMEG0u",
+    "expected_token": null,
+    "oracle_null": true,
+    "go_error": "turnstile_unsolved"
+  },
+  {
+    "name": "n02-unknown-opcode",
+    "p": "synthetic-p-20",
+    "dx": "KCJXTURFRUVDH1wNAW0u",
+    "expected_token": null,
+    "oracle_null": true,
+    "go_error": "turnstile_unsolved"
+  },
+  {
+    "name": "n03-not-json",
+    "p": "",
+    "dx": "dGhpcyBpcyBub3QganNvbg==",
+    "expected_token": null,
+    "oracle_null": true,
+    "go_error": "turnstile_invalid"
+  },
+  {
+    "name": "n04-bad-base64",
+    "p": "",
+    "dx": "!!!not-base64!!!",
+    "expected_token": null,
+    "oracle_null": true,
+    "go_error": "turnstile_invalid"
+  },
+  {
+    "name": "n05-gate-keyerror",
+    "p": "synthetic-p-20",
+    "dx": "KCJcWEhURFlPDVJcEG1fWTVGREVFX1cBUA9KEi5VTi9aVVhJUh1AARIBQ0hCVFtJVFhVGS1w",
+    "expected_token": null,
+    "oracle_null": true,
+    "go_error": "turnstile_unsolved"
+  },
+  {
+    "name": "n06-op17-no-branch",
+    "p": "synthetic-p-20",
+    "dx": "KCJcWEhURFlPDVJaW14XFhlWNUlUMlIaXA0DAEJVTkVYVSlFQ3ZCARIBRUxCVEodVjRPDSsfAhxTSF5FREVFWVEBUB4eEEJPWyk1",
+    "expected_token": null,
+    "oracle_null": true,
+    "go_error": "turnstile_unsolved"
+  },
+  {
+    "name": "n07-op23-none-guard",
+    "p": "synthetic-p-20",
+    "dx": "KCJcWEhURFlPDR5YXlwuVU4vWlZYSVIdQAESA19ZTAxKOCk=",
+    "expected_token": null,
+    "oracle_null": true,
+    "go_error": "turnstile_unsolved"
+  },
+  {
+    "name": "n08-op3-nonstring",
+    "p": "synthetic-p-20",
+    "dx": "KCJdWEhRRjQ+",
+    "expected_token": null,
+    "oracle_null": true,
+    "go_error": "turnstile_unsolved"
+  },
+  {
+    "name": "n09-op18-bad-base64",
+    "p": "synthetic-p-20",
+    "dx": "KCJcWEhURFhPDVIIFxVRJEJUM1RMRUMcQBxvHFMiXFhIVEJfTw1SVRBtX1k1RlhJVFhTHFwNAwBBVU5HREVFX1VwLQ==",
+    "expected_token": null,
+    "oracle_null": true,
+    "go_error": "turnstile_unsolved"
+  },
+  {
+    "name": "n10-op624-nonstring",
+    "p": "synthetic-p-20",
+    "dx": "KCJcWEhURFlPDVJMEG1fWTVGREVFWVIBUBkAbV9ZNUJERUVZUQFQHAIAX1lfRFk4WEk4H0QBEgFDSkJUWVVERUMcQBxvHFMiXFhIVEJeTw1SVRBtX1k1RlhJVFhTH1wNAwBHVU5HREVFX1RwLQ==",
+    "expected_token": null,
+    "oracle_null": true,
+    "go_error": "turnstile_unsolved"
+  },
+  {
+    "name": "n11-object-keys-wrong-arg",
+    "p": "synthetic-p-20",
+    "dx": "KCJcWEhURFlPDVJaW14XFhlaJwceDABZXkZXSQBbM1hIPkZFQxxAHB4QURYaHA0XWh0LRB5KEG1fWTVFX0lUWFMfXA0DAENVTkVYVClFQ3ZCHR4QQklcWEhURFpPDUMBEhILWzMp",
+    "expected_token": null,
+    "oracle_null": true,
+    "go_error": "turnstile_unsolved"
+  }
+]

@@ -1,0 +1,46 @@
+[
+  {
+    "name": "bootstrap-001",
+    "html": "<!DOCTYPE html><html lang=\"en\" data-build=\"c/deadbeef/\"><head>\n<script>window.__x = 1;</script>\n<script src=\"https://chatgpt.com/backend-api/c/deadbeef/_cafe/chunk.js\"></script>\n<script src=\"/assets/vendor.js\"></script>\n</head><body></body></html>",
+    "expected_sources": [
+      "https://chatgpt.com/backend-api/c/deadbeef/_cafe/chunk.js",
+      "/assets/vendor.js"
+    ],
+    "expected_data_build": "c/deadbeef/_"
+  },
+  {
+    "name": "bootstrap-002",
+    "html": "<!DOCTYPE html><html><head><script>inline()</script></head><body></body></html>",
+    "expected_sources": [
+      "https://chatgpt.com/backend-api/sentinel/sdk.js"
+    ],
+    "expected_data_build": ""
+  },
+  {
+    "name": "bootstrap-003",
+    "html": "<html data-build=\"c/abc123/\"><head><script src=\"/assets/a.js\"></script><script src=\"/assets/b.js\"></script></head><body></body></html>",
+    "expected_sources": [
+      "/assets/a.js",
+      "/assets/b.js"
+    ],
+    "expected_data_build": "c/abc123/"
+  },
+  {
+    "name": "bootstrap-004",
+    "html": "<html><head><script src=\"https://chatgpt.com/backend-api/c/first/_one/a.js\"></script><script src=\"https://chatgpt.com/backend-api/c/second/_two/b.js\"></script></head><body></body></html>",
+    "expected_sources": [
+      "https://chatgpt.com/backend-api/c/first/_one/a.js",
+      "https://chatgpt.com/backend-api/c/second/_two/b.js"
+    ],
+    "expected_data_build": "c/second/_"
+  },
+  {
+    "name": "bootstrap-005",
+    "html": "<html>\n<script src='/assets/single-quoted.js'></script>\n<script data-build=\"c/attr/_x\" src=\"/assets/no-c-pattern.js\"></script>\n</html>",
+    "expected_sources": [
+      "/assets/single-quoted.js",
+      "/assets/no-c-pattern.js"
+    ],
+    "expected_data_build": ""
+  }
+]

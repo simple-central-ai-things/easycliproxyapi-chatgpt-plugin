@@ -75,7 +75,9 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   `image-poll-timeout-secs` (default `120`), `image-poll-interval-secs`
   (default `10`), `request-timeout-secs` (default `600`), and
   `retry-401-refresh` (default `true`). Config parsing is fail-closed and
-  rejects unknown keys.
+  rejects unknown keys — except the host-owned `enabled` and `priority`,
+   which CLIProxyAPI v8 injects into every plugin's config before
+   registration (see Deploy); those are accepted and ignored.
 - Client surface: models publish as `chatgpt-proxy/<model>`; image models as
   `chatgpt-proxy/gpt-image-2-proxy` and `chatgpt-proxy/codex-gpt-image-2`.
 - Executor surface: text conversation turns arrive as `executor.execute` /
@@ -123,6 +125,11 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
 
 ## Deploy
 
+The host is the EasyCLI (CLIProxyAPI v8) process embedded in SCPM's
+(simple-central-proxy-manager) single `gateway` container — EasyCLI has no
+port of its own, so the integration is entirely SCPM-side config + this
+artifact.
+
 1. Build the artifact (glibc `linux/amd64` is the only host-loaded target):
 
    ```sh
@@ -130,12 +137,52 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
      -o plugins/linux/amd64/easycliproxyapi-chatgpt-provider.so .
    ```
 
-2. Copy the artifact into the host's plugin directory
-   (`<plugins>/linux/amd64/easycliproxyapi-chatgpt-provider.so`).
-3. Ensure the `plugins.configs.easycliproxyapi-chatgpt-provider` block is in
-   the live host `config.yaml` (see Contracts).
-4. Restart the host; the log must show
+2. Copy the artifact into EasyCLI's plugin directory on the deploy host —
+   `<scpm-deploy-dir>/easycli/plugins/linux/amd64/`. That directory is
+   bind-mounted into the gateway container, so a restart picks it up with no
+   image rebuild.
+3. Ensure the live `config.yaml` carries the plugin block; SCPM renders it
+   from `easycli/config.yaml.template` (`bash easycli/deploy.sh` re-renders
+   and restarts the gateway only when the config changed):
+
+   ```yaml
+   plugins:
+     configs:
+       easycliproxyapi-chatgpt-provider:
+         enabled: true
+         model-prefix: chatgpt-proxy
+         image-model-name: gpt-image-2-proxy
+         codex-image-model-name: codex-gpt-image-2
+         drawing-upstream-model: gpt-5-5
+         thinking-effort: auto
+         base-url: ""
+         message-as-error: true
+         image-poll-timeout-secs: 120
+         image-poll-interval-secs: 10
+         request-timeout-secs: 600
+         tls-mode: stdlib
+         retry-401-refresh: true
+   ```
+
+   The block is secrets-free on purpose: OAuth credentials come from the
+   browser login in the management panel (host auth files), so there is no
+   `api-keys` entry and no SCSM key to feed the plugin. Every plugin field
+   is pinned at its default (see Contracts). `enabled`/`priority` are
+   host-owned: CLIProxyAPI v8 injects them into the plugin's config before
+   registration, so the parser tolerates and ignores them.
+4. Restart the gateway; the startup log must show
    `plugin registered plugin_id=easycliproxyapi-chatgpt-provider`.
+5. Sign in once with a ChatGPT consumer account through the panel's OAuth
+   login. The credential lands in EasyCLI's auth files
+   (`type: "chatgpt-proxy"`, stable hashed name) and the host pool owns it
+   from there (rotation, retry, enable/disable on the panel).
+
+The models then publish through SCPM's catalog: `routing.yaml` maps the
+`chatgpt-proxy/` namespace to the `chatgpt-proxy` plan tag
+(`easycli_plans.prefixes`), so after a LiteLLM restart the chat models are
+addressable as `chatgpt-proxy/<vendor>/<model>:<ctx>:free`. The published
+image names have no chat endpoint on the plan bridge and are dropped from
+the chat catalog like every other plan-bridge image name.
 
 The `.so`/`.h` artifacts are build output and are gitignored; they are never
 committed.

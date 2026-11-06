@@ -74,7 +74,9 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   `quota.identifier` all return `{identifier:"chatgpt-proxy"}`.
 - Host config block (EasyCLI `config.yaml`):
   `plugins.configs.easycliproxyapi-chatgpt-provider` — keys and defaults per
-  README Contracts. Parsing is fail-closed; unknown keys are rejected.
+  README Contracts. Parsing is fail-closed; unknown keys are rejected except
+  the host-owned `enabled`/`priority`, which CLIProxyAPI v8 injects into
+  every plugin's config before registration (accepted, ignored).
 - Model namespace: `chatgpt-proxy/<model>`; published image models
   `chatgpt-proxy/gpt-image-2-proxy` (web-drawing route) and
   `chatgpt-proxy/codex-gpt-image-2` (codex route). The `-proxy` suffix is

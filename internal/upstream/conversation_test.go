@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/plugin"
+	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/model"
 )
 
 // ---------------------------------------------------------------------------
@@ -713,7 +713,7 @@ func TestStreamRequestShape(t *testing.T) {
 
 	t.Run("anon", func(t *testing.T) {
 		fake := &streamFake{chunks: chunkBytes([]byte("data: [DONE]\n\n"), 7)}
-		ch, err := StreamConversation(context.Background(), fake, plugin.Credential{},
+		ch, err := StreamConversation(context.Background(), fake, model.Credential{},
 			SentinelTokens{ChatRequirements: "req-token"}, testPayload(t))
 		if err != nil {
 			t.Fatalf("StreamConversation: %v", err)

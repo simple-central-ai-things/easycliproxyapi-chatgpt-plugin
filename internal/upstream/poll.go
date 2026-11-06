@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/plugin"
+	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/model"
 )
 
 // The oracle's poll cadence constants (image_poll_initial_wait_secs default
@@ -62,7 +62,7 @@ type PollOptions struct {
 
 // NewPollOptions derives the poll cadence from the plugin config, mirroring
 // the oracle reusing image_poll_timeout_secs / image_poll_interval_secs.
-func NewPollOptions(cfg plugin.Config) PollOptions {
+func NewPollOptions(cfg model.Config) PollOptions {
 	return PollOptions{
 		Timeout:     time.Duration(cfg.ImagePollTimeoutSecs) * time.Second,
 		Interval:    time.Duration(cfg.ImagePollIntervalSecs) * time.Second,
@@ -96,7 +96,7 @@ func ctxSleep(ctx context.Context, d time.Duration) error {
 // is cancelled. 429/5xx and transport errors back off exponentially
 // (2/4/8/16/16s, Retry-After honored when present); a 401 returns the typed
 // invalid_token immediately, like the oracle's non-retryable branch.
-func PollConversation(ctx context.Context, u Upstream, cred plugin.Credential, conversationID string, opts PollOptions) (ConversationDoc, error) {
+func PollConversation(ctx context.Context, u Upstream, cred model.Credential, conversationID string, opts PollOptions) (ConversationDoc, error) {
 	if strings.TrimSpace(conversationID) == "" {
 		return ConversationDoc{}, errors.New("PollConversation: a conversation id is required")
 	}
@@ -234,7 +234,7 @@ func parseConversationDoc(body []byte) (ConversationDoc, error) {
 // hides the conversation from the upstream account ({"is_visible": false} —
 // nothing is deleted). The caller gates it (the reference's config flags
 // default off); this helper performs the write when told to.
-func HideConversation(ctx context.Context, u Upstream, cred plugin.Credential, conversationID string) error {
+func HideConversation(ctx context.Context, u Upstream, cred model.Credential, conversationID string) error {
 	if strings.TrimSpace(conversationID) == "" {
 		return errors.New("HideConversation: a conversation id is required")
 	}
@@ -328,7 +328,7 @@ func (t Task) Error() (bool, string) {
 }
 
 // FetchTasks GETs /backend-api/tasks and applies the client-side filter.
-func FetchTasks(ctx context.Context, u Upstream, cred plugin.Credential, filter TaskFilter) ([]Task, error) {
+func FetchTasks(ctx context.Context, u Upstream, cred model.Credential, filter TaskFilter) ([]Task, error) {
 	authed := strings.TrimSpace(cred.AccessToken) != ""
 	path := "/backend-api/tasks"
 	if !authed {

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/plugin"
+	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/model"
 )
 
 // The pinned upstream wire fingerprint. These constants are byte-identical to
@@ -45,7 +45,7 @@ const (
 // random UUIDv4s) so the ids stay stable across restarts; persist the
 // credential after the first call (StorageJSON → host auth save). A nil cred
 // yields the same pinned set with ephemeral ids and no stable fingerprint.
-func SessionHeaders(cred *plugin.Credential, pathTemplate string) http.Header {
+func SessionHeaders(cred *model.Credential, pathTemplate string) http.Header {
 	if cred != nil {
 		ensureFingerprint(cred)
 	}
@@ -91,7 +91,7 @@ func SessionHeaders(cred *plugin.Credential, pathTemplate string) http.Header {
 // ensureFingerprint fills empty per-credential ids with fresh random UUIDv4s,
 // persisting them into cred.Fp so the fingerprint is stable for the life of
 // the account (and across restarts once the credential is saved).
-func ensureFingerprint(cred *plugin.Credential) {
+func ensureFingerprint(cred *model.Credential) {
 	if strings.TrimSpace(cred.Fp.OAIDeviceID) == "" {
 		cred.Fp.OAIDeviceID = newUUID()
 	}
@@ -104,7 +104,7 @@ func ensureFingerprint(cred *plugin.Credential) {
 // bearer token only crosses the ABI on the way out to the upstream; it never
 // appears in envelopes, logs, or error text. A credential without an access
 // token leaves the set unchanged (the anonymous variants use AnonPath).
-func Authed(cred *plugin.Credential, h http.Header) http.Header {
+func Authed(cred *model.Credential, h http.Header) http.Header {
 	if cred != nil && strings.TrimSpace(cred.AccessToken) != "" {
 		h.Set("Authorization", "Bearer "+cred.AccessToken)
 	}

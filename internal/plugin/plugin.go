@@ -86,11 +86,11 @@ func (m *Manager) Handle(method string, request []byte) (resp []byte, err error)
 	case pluginabi.MethodQuotaDescribe:
 		// Static metadata: the quota surface renders on the host's native
 		// auth-file cards; this cannot fail.
-		return ok(pluginapi.QuotaDescribeResponse{
-			SupportedProviders: []string{providerKey},
-			DisplayName:        "ChatGPT (chatgpt-proxy)",
-			SupportsReset:      false,
-		}), nil
+		return handleQuotaDescribe(), nil
+	case pluginabi.MethodQuotaFetch:
+		return m.handleQuotaFetch(request)
+	case pluginabi.MethodQuotaReset:
+		return handleQuotaReset(), nil
 	case pluginabi.MethodAuthParse:
 		return m.handleAuthParse(request)
 	case pluginabi.MethodAuthRefresh:

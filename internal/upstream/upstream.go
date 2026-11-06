@@ -24,7 +24,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 
-	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/plugin"
+	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/model"
 )
 
 // Caller is the host RPC bridge seam (the Task 1 plugin.caller shape): one
@@ -101,7 +101,7 @@ type Upstream interface {
 // default (tls-mode "stdlib" or unset — host proxy settings apply) and the
 // direct client when tls-mode is "utls" (Task 2 verdict). host is the caller
 // seam for the host transport; nil is refused there.
-func NewUpstream(cfg plugin.Config, host Caller) (Upstream, error) {
+func NewUpstream(cfg model.Config, host Caller) (Upstream, error) {
 	switch cfg.TLSMode {
 	case "", "stdlib":
 		if host == nil {
@@ -312,7 +312,7 @@ type directUpstream struct {
 	utlsPending bool
 }
 
-func newDirectUpstream(cfg plugin.Config, proxyURL string, utlsPending bool) (*directUpstream, error) {
+func newDirectUpstream(cfg model.Config, proxyURL string, utlsPending bool) (*directUpstream, error) {
 	transport := &http.Transport{
 		Proxy: proxyFunc(proxyURL),
 	}

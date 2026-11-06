@@ -15,7 +15,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 
-	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/plugin"
+	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/model"
 )
 
 // recordedCall captures one caller.Call invocation (the host RPC seam).
@@ -142,7 +142,7 @@ func newTestHostUpstream(t *testing.T) (*hostUpstream, *recordingCaller) {
 			map[string]any{"done": true},
 		},
 	}
-	cfg, err := plugin.ParseConfig(nil)
+	cfg, err := model.ParseConfig(nil)
 	if err != nil {
 		t.Fatalf("ParseConfig: %v", err)
 	}
@@ -312,7 +312,7 @@ func TestNewUpstreamSelection(t *testing.T) {
 	rec := &recordingCaller{}
 
 	t.Run("stdlib default", func(t *testing.T) {
-		cfg, err := plugin.ParseConfig(nil)
+		cfg, err := model.ParseConfig(nil)
 		if err != nil {
 			t.Fatalf("ParseConfig: %v", err)
 		}
@@ -326,7 +326,7 @@ func TestNewUpstreamSelection(t *testing.T) {
 	})
 
 	t.Run("empty mode falls back to host transport", func(t *testing.T) {
-		u, err := NewUpstream(plugin.Config{TLSMode: ""}, rec)
+		u, err := NewUpstream(model.Config{TLSMode: ""}, rec)
 		if err != nil {
 			t.Fatalf("NewUpstream: %v", err)
 		}
@@ -336,7 +336,7 @@ func TestNewUpstreamSelection(t *testing.T) {
 	})
 
 	t.Run("utls picks direct transport, requests fail typed", func(t *testing.T) {
-		u, err := NewUpstream(plugin.Config{TLSMode: "utls"}, rec)
+		u, err := NewUpstream(model.Config{TLSMode: "utls"}, rec)
 		if err != nil {
 			t.Fatalf("NewUpstream: %v", err)
 		}
@@ -354,13 +354,13 @@ func TestNewUpstreamSelection(t *testing.T) {
 	})
 
 	t.Run("nil host refused", func(t *testing.T) {
-		if _, err := NewUpstream(plugin.Config{TLSMode: "stdlib"}, nil); err == nil {
+		if _, err := NewUpstream(model.Config{TLSMode: "stdlib"}, nil); err == nil {
 			t.Fatal("NewUpstream with nil host must error")
 		}
 	})
 
 	t.Run("unknown mode refused", func(t *testing.T) {
-		if _, err := NewUpstream(plugin.Config{TLSMode: "bogus"}, rec); err == nil {
+		if _, err := NewUpstream(model.Config{TLSMode: "bogus"}, rec); err == nil {
 			t.Fatal("NewUpstream with unknown TLSMode must error")
 		}
 	})
@@ -390,7 +390,7 @@ func TestDirectUpstreamStdlib(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	cfg := plugin.Config{TLSMode: "stdlib", RequestTimeoutSecs: 30}
+	cfg := model.Config{TLSMode: "stdlib", RequestTimeoutSecs: 30}
 	direct, err := newDirectUpstream(cfg, "", false)
 	if err != nil {
 		t.Fatalf("newDirectUpstream: %v", err)

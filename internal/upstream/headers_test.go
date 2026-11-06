@@ -6,17 +6,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/plugin"
+	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/model"
 )
 
 // fixtureCredential is the golden-test credential: its fingerprint is
 // pre-set (so the header map is deterministic) and its access token is a
 // fixture, never a real secret.
-func fixtureCredential() plugin.Credential {
-	return plugin.Credential{
+func fixtureCredential() model.Credential {
+	return model.Credential{
 		Email:       "fixture@example.com",
 		AccessToken: "fixture-access-token",
-		Fp: plugin.Fingerprint{
+		Fp: model.Fingerprint{
 			OAIDeviceID:  "11111111-1111-4111-8111-111111111111",
 			OAISessionID: "22222222-2222-4222-8222-222222222222",
 		},
@@ -103,7 +103,7 @@ func TestSessionHeadersFpOverrides(t *testing.T) {
 // storage round-trip — so OAI-Device-Id / OAI-Session-Id are stable across
 // restarts and re-parses.
 func TestFingerprintStability(t *testing.T) {
-	cred := plugin.Credential{Email: "fixture@example.com"}
+	cred := model.Credential{Email: "fixture@example.com"}
 
 	first := SessionHeaders(&cred, "/backend-api/models")
 	deviceID := first.Get("OAI-Device-Id")
@@ -121,7 +121,7 @@ func TestFingerprintStability(t *testing.T) {
 	}
 
 	// Re-parse the persisted credential and build headers again: same ids.
-	parsed, err := plugin.FromStorageJSON(cred.StorageJSON())
+	parsed, err := model.FromStorageJSON(cred.StorageJSON())
 	if err != nil {
 		t.Fatalf("FromStorageJSON: %v", err)
 	}

@@ -16,7 +16,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/plugin"
+	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/model"
 )
 
 // SentinelTokens is the token bundle one sentinel handshake acquires. An
@@ -107,7 +107,7 @@ type sentinelFinalizeRequest struct {
 // wire fingerprint and (unless anon) the bearer token; anon switches both
 // the path family (/backend-anon/) and drops Authorization, mirroring the
 // reference's access-token branch.
-func AcquireSentinel(ctx context.Context, u Upstream, cred plugin.Credential, anon bool) (SentinelTokens, error) {
+func AcquireSentinel(ctx context.Context, u Upstream, cred model.Credential, anon bool) (SentinelTokens, error) {
 	ua := sentinelUserAgent(&cred)
 
 	// 1. Bootstrap: warm the homepage and extract the PoW references. The
@@ -301,7 +301,7 @@ func sentinelTruthy(value any) bool {
 // sentinelUserAgent is the UA both the headers and the PoW config carry:
 // the credential's stored fingerprint UA when set, else the pinned default
 // (same rule as SessionHeaders).
-func sentinelUserAgent(cred *plugin.Credential) string {
+func sentinelUserAgent(cred *model.Credential) string {
 	if cred != nil && strings.TrimSpace(cred.Fp.UserAgent) != "" {
 		return cred.Fp.UserAgent
 	}

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/plugin"
+	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/model"
 )
 
 // sleepRecorder is the fake clock: it records every requested sleep instead
@@ -410,7 +410,7 @@ func TestTaskErrorDetection(t *testing.T) {
 func TestPollAnonPath(t *testing.T) {
 	u := &scriptedUpstream{responses: []Resp{pollResp(200, "", pollDocFixture)}}
 	rec := &sleepRecorder{}
-	if _, err := PollConversation(context.Background(), u, plugin.Credential{}, "c-1",
+	if _, err := PollConversation(context.Background(), u, model.Credential{}, "c-1",
 		deterministicOpts(rec, 120*time.Second, 10*time.Second, 10*time.Second)); err != nil {
 		t.Fatalf("PollConversation: %v", err)
 	}

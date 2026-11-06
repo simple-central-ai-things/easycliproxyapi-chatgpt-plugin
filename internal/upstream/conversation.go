@@ -35,7 +35,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/plugin"
+	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/model"
 )
 
 // ConvEvent Kind values (neutral wire for the executor).
@@ -232,7 +232,7 @@ func WithRequestMessages(messages []ConversationMessage) StreamOption {
 //
 // cred empty (no access token) switches the path family to /backend-anon/
 // and drops Authorization, mirroring the oracle's access-token branch.
-func StreamConversation(ctx context.Context, u Upstream, cred plugin.Credential, tokens SentinelTokens, payload map[string]any, opts ...StreamOption) (<-chan ConvEvent, error) {
+func StreamConversation(ctx context.Context, u Upstream, cred model.Credential, tokens SentinelTokens, payload map[string]any, opts ...StreamOption) (<-chan ConvEvent, error) {
 	if len(payload) == 0 {
 		return nil, errors.New("StreamConversation: a conversation payload is required")
 	}

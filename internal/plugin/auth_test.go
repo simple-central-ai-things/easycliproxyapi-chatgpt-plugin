@@ -521,6 +521,99 @@ func TestRefreshRenewsTriple(t *testing.T) {
 	}
 }
 
+// TestRefreshPersistsPlan pins the refresh half of plan persistence (oracle
+// background-watcher semantics: a successful refresh updates plan_type): the
+// record's plan comes from the accounts/check leg, the persisted plan drives
+// the for_auth codex image gate end to end, and refresh failures — including
+// plan-probe failures — leave the plan untouched.
+func TestRefreshPersistsPlan(t *testing.T) {
+	cred := fullCredential()
+	cred.Plan = "" // the record has no plan yet (e.g. imported)
+	fake := &httpFakeCaller{httpResults: []hostHTTPResponse{
+		{StatusCode: 200, Body: mustJSON(t, map[string]any{
+			"access_token":  "new-access-token",
+			"refresh_token": "new-refresh-token",
+			"id_token":      "new-id-token",
+		})},
+		{StatusCode: 200, Body: mustJSON(t, map[string]any{
+			"accounts": map[string]any{"default": map[string]any{"account": map[string]any{"plan_type": "pro"}}},
+		})},
+	}}
+	m := newAuthTestManager(t, fake)
+	resp, err := m.Handle(pluginabi.MethodAuthRefresh, authRefreshRequestBody(t, cred, "chatgpt-proxy-0123456789abcdef.json", "cb-1"))
+	if err != nil {
+		t.Fatalf("Handle(auth.refresh): %v", err)
+	}
+	out := decodeRefreshResponse(t, resp)
+	updated, err := FromStorageJSON(out.Auth.StorageJSON)
+	if err != nil {
+		t.Fatalf("FromStorageJSON(refreshed): %v", err)
+	}
+	if updated.Plan != "pro" {
+		t.Fatalf("persisted Plan = %q, want pro from the accounts/check leg", updated.Plan)
+	}
+	// The persisted plan publishes the codex image route in for_auth.
+	modelsFake := &modelFakeCaller{scripts: map[string]hostHTTPResponse{
+		modelScriptKey(modelsRouteURL, updated): modelsScript(200, `{"models":[]}`),
+	}}
+	out2 := decodeModelResponse(t, handleModel(t, modelManager(t, modelsFake),
+		pluginabi.MethodModelForAuth, modelForAuthBody(t, updated)))
+	if _, ok := modelsByID(out2)["chatgpt-proxy/codex-gpt-image-2"]; !ok {
+		t.Fatalf("codex image model not published for the plan refresh persisted: %v", modelsByID(out2))
+	}
+
+	t.Run("refresh failure leaves plan untouched", func(t *testing.T) {
+		cred := fullCredential()
+		cred.Plan = ""
+		fake := &httpFakeCaller{httpResults: []hostHTTPResponse{{
+			StatusCode: 400,
+			Body:       mustJSON(t, map[string]any{"error": "invalid_grant"}),
+		}}}
+		m := newAuthTestManager(t, fake)
+		resp, err := m.Handle(pluginabi.MethodAuthRefresh, authRefreshRequestBody(t, cred, "chatgpt-proxy-0123456789abcdef.json", "cb-1"))
+		if err != nil {
+			t.Fatalf("Handle(auth.refresh): %v", err)
+		}
+		out := decodeRefreshResponse(t, resp) // soft failure replies OK with backoff
+		updated, err := FromStorageJSON(out.Auth.StorageJSON)
+		if err != nil {
+			t.Fatalf("FromStorageJSON: %v", err)
+		}
+		if updated.Plan != "" {
+			t.Fatalf("Plan = %q after a failed refresh, want untouched (empty)", updated.Plan)
+		}
+	})
+
+	t.Run("plan probe failure does not fail refresh", func(t *testing.T) {
+		cred := fullCredential()
+		cred.Plan = ""
+		fake := &httpFakeCaller{httpResults: []hostHTTPResponse{
+			{StatusCode: 200, Body: mustJSON(t, map[string]any{
+				"access_token":  "new-access-token",
+				"refresh_token": "new-refresh-token",
+				"id_token":      "new-id-token",
+			})},
+			{StatusCode: 401, Body: mustJSON(t, map[string]any{"error": "unauthorized"})}, // typed upstream error, swallowed as best-effort
+		}}
+		m := newAuthTestManager(t, fake)
+		resp, err := m.Handle(pluginabi.MethodAuthRefresh, authRefreshRequestBody(t, cred, "chatgpt-proxy-0123456789abcdef.json", "cb-1"))
+		if err != nil {
+			t.Fatalf("Handle(auth.refresh): %v", err)
+		}
+		out := decodeRefreshResponse(t, resp)
+		updated, err := FromStorageJSON(out.Auth.StorageJSON)
+		if err != nil {
+			t.Fatalf("FromStorageJSON: %v", err)
+		}
+		if updated.AccessToken != "new-access-token" {
+			t.Fatalf("refresh did not renew the tokens despite the plan probe failure: %+v", updated)
+		}
+		if updated.Plan != "" {
+			t.Fatalf("Plan = %q after a plan probe failure, want untouched (empty)", updated.Plan)
+		}
+	})
+}
+
 // TestRefreshFileNameStable pins the stability contract (Review Focus #3):
 // refresh returns the input record's file name byte-identical, so a refresh
 // can never rename the pool entry or race an in-flight rotation.

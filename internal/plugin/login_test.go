@@ -384,6 +384,9 @@ func TestPollSuccessConsumesAttempt(t *testing.T) {
 			"id":    "account-1",
 			"email": "owner@example.com",
 		})},
+		{StatusCode: 200, Body: mustJSON(t, map[string]any{
+			"accounts": map[string]any{"default": map[string]any{"account": map[string]any{"plan_type": "plus"}}},
+		})},
 	}}
 	m, start := startLogin(t, fake, testBaseURL, authDir)
 	m.loginMu.Lock()
@@ -429,6 +432,7 @@ func TestPollSuccessConsumesAttempt(t *testing.T) {
 	exchanges := 0
 	var exchangeBody map[string]string
 	var meRequest hostHTTPRequest
+	var planRequest hostHTTPRequest
 	for _, call := range fake.calls {
 		if call.method != pluginabi.MethodHostHTTPDo {
 			t.Fatalf("unexpected host call %s", call.method)
@@ -451,6 +455,8 @@ func TestPollSuccessConsumesAttempt(t *testing.T) {
 			}
 		case chatgptMeURL:
 			meRequest = req
+		case quotaProbeAccountURL:
+			planRequest = req
 		default:
 			t.Errorf("unexpected exchange target %q", req.URL)
 		}
@@ -480,6 +486,18 @@ func TestPollSuccessConsumesAttempt(t *testing.T) {
 		t.Errorf("me request Authorization = %q, want the bearer access token", authz)
 	}
 
+	// The best-effort plan probe runs the pinned accounts/check leg with the
+	// same bearer and persists plan_type into the returned record.
+	if planRequest.Method != "GET" {
+		t.Errorf("plan probe method = %q, want GET", planRequest.Method)
+	}
+	if authz := strings.Join(planRequest.Headers["Authorization"], ","); authz != "Bearer login-access-token" {
+		t.Errorf("plan probe Authorization = %q, want the bearer access token", authz)
+	}
+	if cred.Plan != "plus" {
+		t.Errorf("persisted Plan = %q, want plus from the plan probe", cred.Plan)
+	}
+
 	// Replay protection: the attempt is consumed, so a second poll for the
 	// same state answers pending and the code is never exchanged again.
 	m.loginMu.Lock()
@@ -496,9 +514,105 @@ func TestPollSuccessConsumesAttempt(t *testing.T) {
 	if replay.Status != pluginapi.AuthLoginStatusPending {
 		t.Fatalf("replay poll Status = %q, want pending", replay.Status)
 	}
-	if exchangesNow := countHostCalls(fake, pluginabi.MethodHostHTTPDo); exchangesNow != 2 {
-		t.Fatalf("replay poll made %d transport calls (want 0 new): %v", exchangesNow-2, fake.methods())
+	if exchangesNow := countHostCalls(fake, pluginabi.MethodHostHTTPDo); exchangesNow != 3 {
+		t.Fatalf("replay poll made %d transport calls (want 0 new): %v", exchangesNow-3, fake.methods())
 	}
+}
+
+// TestPollSuccessPersistsPlan pins the plan-persistence data flow (review
+// fix for the dead codex-image gate): a plugin-created credential carries
+// the plan_type its accounts/check probe returned, so model.for_auth's codex
+// image gate reads a plan the plugin itself wrote — not a hand-set fixture.
+func TestPollSuccessPersistsPlan(t *testing.T) {
+	cases := []struct {
+		name  string
+		plan  string
+		codex bool
+	}{
+		{name: "plus publishes codex route", plan: "plus", codex: true},
+		{name: "free gates codex route out", plan: "free", codex: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			authDir := t.TempDir()
+			fake := &httpFakeCaller{httpResults: []hostHTTPResponse{
+				{StatusCode: 200, Body: mustJSON(t, map[string]any{
+					"access_token":  "login-access-token",
+					"refresh_token": "login-refresh-token",
+					"id_token":      "login-id-token",
+				})},
+				{StatusCode: 200, Body: mustJSON(t, map[string]any{
+					"id":    "account-1",
+					"email": "owner@example.com",
+				})},
+				{StatusCode: 200, Body: mustJSON(t, map[string]any{
+					"accounts": map[string]any{"default": map[string]any{"account": map[string]any{"plan_type": tc.plan}}},
+				})},
+			}}
+			m, start := startLogin(t, fake, testBaseURL, authDir)
+			writeCallbackFile(t, authDir, start.State, "auth-code-123", "")
+			out := decodeLoginPoll(t, handleModel(t, m, pluginabi.MethodAuthLoginPoll, loginPollRequestBody(t, start.State, authDir, "cb-2")))
+			if out.Status != pluginapi.AuthLoginStatusSuccess {
+				t.Fatalf("Status = %q, want success", out.Status)
+			}
+			cred, err := FromStorageJSON(out.Auth.StorageJSON)
+			if err != nil {
+				t.Fatalf("FromStorageJSON: %v", err)
+			}
+			if cred.Plan != tc.plan {
+				t.Fatalf("persisted Plan = %q, want %q (the login probe's plan_type)", cred.Plan, tc.plan)
+			}
+
+			// The catalog gate sees the plugin-written plan.
+			modelsFake := &modelFakeCaller{scripts: map[string]hostHTTPResponse{
+				modelScriptKey(modelsRouteURL, cred): modelsScript(200, `{"models":[]}`),
+			}}
+			out2 := decodeModelResponse(t, handleModel(t, modelManager(t, modelsFake),
+				pluginabi.MethodModelForAuth, modelForAuthBody(t, cred)))
+			byID := modelsByID(out2)
+			if _, ok := byID["chatgpt-proxy/codex-gpt-image-2"]; ok != tc.codex {
+				t.Fatalf("codex image model published = %v, want %v for plan %q the login persisted", ok, tc.codex, tc.plan)
+			}
+			if _, ok := byID["chatgpt-proxy/gpt-image-2-proxy"]; !ok {
+				t.Fatalf("web-drawing image model missing from %v", byID)
+			}
+		})
+	}
+
+	t.Run("plan probe failure keeps login success", func(t *testing.T) {
+		probeFailures := []hostHTTPResponse{
+			{StatusCode: 500, Body: []byte(`{"error":"probe down"}`)},
+			{StatusCode: 401, Body: []byte(`{"error":"unauthorized"}`)}, // never credential_terminated-style
+		}
+		for i, failure := range probeFailures {
+			authDir := t.TempDir()
+			fake := &httpFakeCaller{httpResults: []hostHTTPResponse{
+				{StatusCode: 200, Body: mustJSON(t, map[string]any{
+					"access_token":  "login-access-token",
+					"refresh_token": "login-refresh-token",
+					"id_token":      "login-id-token",
+				})},
+				{StatusCode: 200, Body: mustJSON(t, map[string]any{
+					"id":    "account-1",
+					"email": "owner@example.com",
+				})},
+				failure,
+			}}
+			m, start := startLogin(t, fake, testBaseURL, authDir)
+			writeCallbackFile(t, authDir, start.State, "auth-code-123", "")
+			out := decodeLoginPoll(t, handleModel(t, m, pluginabi.MethodAuthLoginPoll, loginPollRequestBody(t, start.State, authDir, "cb-2")))
+			if out.Status != pluginapi.AuthLoginStatusSuccess {
+				t.Fatalf("probe failure #%d: Status = %q (%q), want success — the plan probe is best-effort", i, out.Status, out.Message)
+			}
+			cred, err := FromStorageJSON(out.Auth.StorageJSON)
+			if err != nil {
+				t.Fatalf("FromStorageJSON: %v", err)
+			}
+			if cred.Plan != "" {
+				t.Fatalf("probe failure #%d: Plan = %q, want as-is (empty)", i, cred.Plan)
+			}
+		}
+	})
 }
 
 // TestPollProviderError pins the provider-refusal path: a callback file

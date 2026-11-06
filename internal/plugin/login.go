@@ -416,6 +416,14 @@ func (m *Manager) verifyLoginAccount(callbackID string, tokens loginTokens) plug
 	}
 	// JWT claims backfill any identity fact /me left out (Task 3 helper).
 	cred = normalizeCredential(cred)
+	// Persist the plan into the record the moment it is known: the codex
+	// image route publishes per the credential's plan (model.for_auth), and
+	// this record is its only source. Best-effort — a probe failure keeps
+	// Plan as-is and still returns success; the record picks up the plan at
+	// the first refresh.
+	if plan, err := m.probePlan(cred); err == nil {
+		cred.Plan = plan
+	}
 	fileName := FileNameFor(cred)
 	return pluginapi.AuthLoginPollResponse{
 		Status:  pluginapi.AuthLoginStatusSuccess,

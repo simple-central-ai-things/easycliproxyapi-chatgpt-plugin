@@ -14,6 +14,8 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
+
+	"github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin/internal/upstream"
 )
 
 // Refresh surface wire contract, pinned to the reference values.
@@ -34,6 +36,11 @@ const (
 	// errCodeCredentialTerminated marks accounts whose OAuth session the
 	// provider terminated; only a fresh login recovers them.
 	errCodeCredentialTerminated = "credential_terminated"
+
+	// planProbeTimeout bounds the best-effort plan probe login and refresh
+	// run after a credential lifecycle success (the oracle's get_user_info
+	// legs use timeout=30).
+	planProbeTimeout = 30 * time.Second
 )
 
 // Sentinels refreshToken returns so handleAuthRefresh can pick the reply
@@ -267,7 +274,34 @@ func (m *Manager) refreshToken(_ context.Context, callbackID string, cred Creden
 	}
 	updated.LastRefreshAt = now
 	updated.LastRefreshError = ""
-	return normalizeCredential(updated), nil
+	updated = normalizeCredential(updated)
+	// Persist the plan on a SUCCESSFUL refresh (the oracle's background
+	// watcher refreshes plan_type on every cycle): the record is the source
+	// model.for_auth's codex image gate reads. Best-effort — a probe failure
+	// leaves Plan untouched and never fails the refresh.
+	if plan, err := m.probePlan(updated); err == nil {
+		updated.Plan = plan
+	}
+	return updated, nil
+}
+
+// probePlan fetches the account's plan_type through the pinned
+// accounts/check leg (oracle get_user_info plan source) with the record's
+// bearer. Login and refresh call it best-effort: ANY error — including a
+// typed 401 invalid_token — is returned for the caller to discard, so a plan
+// probe can never fail the credential lifecycle or surface as a
+// credential_terminated-style typed error.
+func (m *Manager) probePlan(cred Credential) (string, error) {
+	m.mu.RLock()
+	cfg := m.cfg
+	m.mu.RUnlock()
+	u, err := upstream.NewUpstream(cfg, m.host)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), planProbeTimeout)
+	defer cancel()
+	return upstream.ProbePlan(ctx, u, cred)
 }
 
 // oauthRefreshError turns a rejected refresh response into an error. The

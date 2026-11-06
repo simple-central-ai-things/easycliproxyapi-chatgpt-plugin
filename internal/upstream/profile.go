@@ -139,6 +139,27 @@ func ProbeProfile(ctx context.Context, u Upstream, cred model.Credential) (Profi
 	return mergeProfile(meBody, initBody, accountBody)
 }
 
+// ProbePlan fetches ONLY the plan leg — GET accounts/check with the pinned
+// session headers plus the credential bearer (the oracle's get_user_info
+// plan source, openai_backend_api.py lines 315-326) — and returns the
+// plan_type with the oracle's "free" default applied. Login and refresh use
+// it to persist the plan into the credential record; it exists separately
+// from ProbeProfile because those paths already hold the identity and only
+// need the plan — never the full triple. Any error is returned as-is; the
+// caller classifies it as best-effort (leave the record's plan as-is).
+func ProbePlan(ctx context.Context, u Upstream, cred model.Credential) (string, error) {
+	ensureFingerprint(&cred)
+	body, err := fetchProfileLeg(ctx, u, &cred, http.MethodGet, profileAccountURL, profileAccountPath, nil)
+	if err != nil {
+		return "", err
+	}
+	var account accountPayload
+	if err := json.Unmarshal(body, &account); err != nil {
+		return "", errors.New("the /backend-api/accounts/check response is not a valid JSON object")
+	}
+	return planFromAccount(account), nil
+}
+
 // fetchProfileLeg issues one probe leg with the pinned session headers plus
 // the credential bearer. The oracle sends Content-Type only on the POST leg
 // (line 300); non-2xx maps through the seam's typed statusError (401 →
@@ -199,6 +220,19 @@ type accountPayload struct {
 	} `json:"accounts"`
 }
 
+// planFromAccount derives the plan from a decoded accounts.check payload.
+// Oracle line 351: a missing (or null/empty) plan_type defaults to "free".
+func planFromAccount(account accountPayload) string {
+	plan := "free"
+	if account.Accounts != nil && account.Accounts.Default != nil &&
+		account.Accounts.Default.Account != nil &&
+		account.Accounts.Default.Account.PlanType != nil &&
+		strings.TrimSpace(*account.Accounts.Default.Account.PlanType) != "" {
+		plan = *account.Accounts.Default.Account.PlanType
+	}
+	return plan
+}
+
 // mergeProfile derives the Profile from the three leg bodies. Error text
 // names only the seam — never payload material (secret rule).
 func mergeProfile(meBody, initBody, accountBody []byte) (Profile, error) {
@@ -223,16 +257,11 @@ func mergeProfile(meBody, initBody, accountBody []byte) (Profile, error) {
 		DefaultModelSlug: defaultModelSlug(init.DefaultModelSlug),
 	}
 
-	// Oracle line 351: a missing (or null/empty) plan_type defaults to "free".
-	profile.Plan = "free"
-	if account.Accounts != nil && account.Accounts.Default != nil && account.Accounts.Default.Account != nil {
-		acc := account.Accounts.Default.Account
-		if acc.PlanType != nil && strings.TrimSpace(*acc.PlanType) != "" {
-			profile.Plan = *acc.PlanType
-		}
-		if acc.IsDeactivated != nil {
-			profile.Deactivated = *acc.IsDeactivated
-		}
+	profile.Plan = planFromAccount(account)
+	if account.Accounts != nil && account.Accounts.Default != nil &&
+		account.Accounts.Default.Account != nil &&
+		account.Accounts.Default.Account.IsDeactivated != nil {
+		profile.Deactivated = *account.Accounts.Default.Account.IsDeactivated
 	}
 
 	profile.LimitsProgress = decodeLimitWindows(init.LimitsProgress, probeNow())

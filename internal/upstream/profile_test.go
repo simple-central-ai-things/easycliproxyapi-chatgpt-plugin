@@ -312,6 +312,86 @@ func TestProbeDeactivated(t *testing.T) {
 	})
 }
 
+// singleLegUpstream scripts one URL for the single-call ProbePlan (no
+// rendezvous — there is nothing to parallelize).
+type singleLegUpstream struct {
+	resp     Resp
+	requests []Req
+}
+
+func (u *singleLegUpstream) Do(_ context.Context, req Req) (Resp, error) {
+	u.requests = append(u.requests, req)
+	return u.resp, nil
+}
+
+func (u *singleLegUpstream) DoStream(context.Context, Req) (*Stream, error) {
+	return nil, errors.New("singleLegUpstream: DoStream is not used by ProbePlan")
+}
+
+// ---------------------------------------------------------------------------
+// TestProbePlan — the single accounts/check leg login and refresh use to
+// persist the plan into the credential record (oracle get_user_info plan
+// source, openai_backend_api.py lines 315-326): plan_type with the "free"
+// default, the pinned wire leg, and typed 401 / malformed-body failures.
+// ---------------------------------------------------------------------------
+
+func TestProbePlan(t *testing.T) {
+	cred := model.Credential{AccessToken: "plan-probe-token"}
+
+	t.Run("plan_type with pinned wire leg", func(t *testing.T) {
+		u := &singleLegUpstream{resp: scriptResp(http.StatusOK, profileAccountFixture)}
+		plan, err := ProbePlan(context.Background(), u, cred)
+		if err != nil {
+			t.Fatalf("ProbePlan: %v", err)
+		}
+		if plan != "plus" {
+			t.Fatalf("plan = %q, want plus from the fixture plan_type", plan)
+		}
+		if len(u.requests) != 1 {
+			t.Fatalf("ProbePlan issued %d transport calls, want exactly 1 (the accounts/check leg)", len(u.requests))
+		}
+		req := u.requests[0]
+		if req.URL != wantProfileAccountURL || req.Method != http.MethodGet {
+			t.Fatalf("leg = %s %s, want GET %s", req.Method, req.URL, wantProfileAccountURL)
+		}
+		if got := req.Headers.Get("Authorization"); got != "Bearer plan-probe-token" {
+			t.Fatalf("Authorization = %q, want the credential bearer", got)
+		}
+		if got := req.Headers.Get("X-OpenAI-Target-Path"); got != "/backend-api/accounts/check/v4-2023-04-27" {
+			t.Fatalf("X-OpenAI-Target-Path = %q, want the bare route (oracle _headers convention)", got)
+		}
+	})
+
+	t.Run("missing plan_type defaults to free", func(t *testing.T) {
+		u := &singleLegUpstream{resp: scriptResp(http.StatusOK, `{"accounts":null}`)}
+		plan, err := ProbePlan(context.Background(), u, cred)
+		if err != nil {
+			t.Fatalf("ProbePlan: %v", err)
+		}
+		if plan != "free" {
+			t.Fatalf("plan = %q, want the oracle free default", plan)
+		}
+	})
+
+	t.Run("401 is the typed invalid token", func(t *testing.T) {
+		u := &singleLegUpstream{resp: scriptResp(http.StatusUnauthorized, `{"error":"unauthorized"}`)}
+		plan, err := ProbePlan(context.Background(), u, cred)
+		if !errors.Is(err, ErrInvalidToken) {
+			t.Fatalf("error = %v, want typed invalid_token", err)
+		}
+		if plan != "" {
+			t.Fatalf("plan = %q, want empty on failure", plan)
+		}
+	})
+
+	t.Run("malformed body is a typed error", func(t *testing.T) {
+		u := &singleLegUpstream{resp: scriptResp(http.StatusOK, `not-json`)}
+		if plan, err := ProbePlan(context.Background(), u, cred); err == nil || plan != "" {
+			t.Fatalf("ProbePlan = (%q, %v), want a typed error and no plan", plan, err)
+		}
+	})
+}
+
 // ---------------------------------------------------------------------------
 // TestProbe401Typed — a 401 on ANY leg is the typed invalid_token; the other
 // legs' successes are discarded (the executor forces a refresh + one retry,

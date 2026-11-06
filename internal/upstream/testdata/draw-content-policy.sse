@@ -1,0 +1,11 @@
+data: v1
+
+data: {"type":"resume_conversation_token","token":"t","conversation_id":"c-policy-1"}
+
+data: {"type":"moderation","moderation_response":{"blocked":true},"conversation_id":"c-policy-1"}
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-1","author":{"role":"assistant"},"content":{"content_type":"text","parts":[""]}},"conversation_id":"c-policy-1"}}
+
+data: {"p":"/message/content/parts/0","o":"append","v":"I can't generate that image because it would violate the content policy."}
+
+data: [DONE]

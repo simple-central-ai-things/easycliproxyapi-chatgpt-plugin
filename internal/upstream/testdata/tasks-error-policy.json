@@ -1,0 +1,8 @@
+{"tasks": [
+  {"task_id": "task-policy", "conversation_id": "c-policy-1",
+   "image_gen_message": {
+     "metadata": {"is_error": true},
+     "author": {"role": "assistant"},
+     "content": {"content_type": "text", "parts": ["This image request was blocked by upstream moderation."]}
+   }}
+]}

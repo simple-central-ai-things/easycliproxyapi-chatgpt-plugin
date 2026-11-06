@@ -1,0 +1,13 @@
+data: v1
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-1","author":{"role":"assistant"},"content":{"content_type":"text","parts":[""]},"status":"in_progress"}}}
+
+data: {"p":"/message/content/parts/0","o":"append","v":"Generating the image. Tool parameters: "}
+
+data: {"v":"{\"prompt\": \"a lighthouse at dusk\", \"referenced_image_ids\": [\"ref-001\"], \"size\": \"1024x1024\", \"n\": 1}"}
+
+data: {"type":"server_ste_metadata","metadata":{"tool_invoked":true,"turn_use_case":"image gen","model_slug":"gpt-5-5"}}
+
+data: {"type":"title_generation","title":"Image"}
+
+data: [DONE]

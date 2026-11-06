@@ -1,0 +1,4 @@
+{"mapping": {
+  "u-1": {"message": {"id": "u-1", "author": {"role": "user"}, "create_time": 1700000060, "content": {"content_type": "text", "parts": ["a lighthouse"]}}},
+  "t-1": {"message": {"id": "t-1", "author": {"role": "tool"}, "create_time": 1700000090, "metadata": {"async_task_type": "image_gen"}, "content": {"content_type": "multimodal_text", "parts": [{"content_type": "image_asset_pointer", "asset_pointer": "file-service://file_00000000fedcba9876543210fedcba98", "width": 1024, "height": 1024, "size_bytes": 98765}]}}}
+}}

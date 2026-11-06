@@ -270,6 +270,18 @@ func StreamConversation(ctx context.Context, u Upstream, cred model.Credential, 
 		headers.Set("OpenAI-Sentinel-SO-Token", tokens.SO)
 	}
 
+	return runConversationStream(ctx, u, path, headers, body, o.hardCap,
+		o.historyText, o.historyMessages)
+}
+
+// runConversationStream opens one upstream SSE with an already-built body and
+// header set, runs the hard-cap watchdog and the reader goroutine, and
+// returns the neutral event channel. StreamConversation builds the text-turn
+// request and calls this; the drawing route (image_drawing.go) builds the
+// image-turn request (oracle _image_headers: the sentinel set there carries
+// only the requirements + proof tokens, plus the conduit token and a fresh
+// X-Oai-Turn-Trace-Id) and calls the same seam.
+func runConversationStream(ctx context.Context, u Upstream, path string, headers http.Header, body []byte, hardCap time.Duration, historyText string, historyMessages []string) (<-chan ConvEvent, error) {
 	streamCtx, cancel := context.WithCancel(ctx)
 	stream, err := u.DoStream(streamCtx, Req{
 		Method:      http.MethodPost,
@@ -290,19 +302,20 @@ func StreamConversation(ctx context.Context, u Upstream, cred model.Credential, 
 
 	ch := make(chan ConvEvent, 16)
 	var timedOut atomic.Bool
-	timer := time.AfterFunc(o.hardCap, func() {
+	timer := time.AfterFunc(hardCap, func() {
 		timedOut.Store(true)
 		cancel()
 		// Closing the stream unblocks a reader stuck in a synchronous
 		// read (both transports unblock on Close).
 		_ = stream.Close()
 	})
+	readerOptions := streamOptions{hardCap: hardCap, historyText: historyText, historyMessages: historyMessages}
 	go func() {
 		defer close(ch)
 		defer timer.Stop()
 		defer cancel()
 		defer func() { _ = stream.Close() }()
-		readConversationStream(ctx, ch, stream, o, timedOut.Load)
+		readConversationStream(ctx, ch, stream, readerOptions, timedOut.Load)
 	}()
 	return ch, nil
 }
@@ -596,8 +609,11 @@ func extractConversationIDs(payload string) (string, []string, []string) {
 	for _, match := range fileServiceIDRe.FindAllStringSubmatch(payload, -1) {
 		fileIDs = addUnique(fileIDs, []string{match[1]})
 	}
-	for _, match := range realImageFileIDRe.FindAllStringSubmatch(payload, -1) {
-		fileIDs = addUnique(fileIDs, []string{match[1]})
+	// No capture group: findall semantics (full match), like the oracle's
+	// REAL_IMAGE_FILE_ID_RE.findall — FindAllStringSubmatch would panic on
+	// match[1].
+	for _, match := range realImageFileIDRe.FindAllString(payload, -1) {
+		fileIDs = addUnique(fileIDs, []string{match})
 	}
 	for _, match := range fileIDScanRe.FindAllString(payload, -1) {
 		name := match[len("file")+1:] // strip "file" + the separator

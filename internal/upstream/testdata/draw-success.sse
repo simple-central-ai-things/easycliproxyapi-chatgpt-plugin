@@ -1,0 +1,11 @@
+data: v1
+
+data: {"type":"resume_conversation_token","token":"t","conversation_id":"c-draw-1"}
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-user","author":{"role":"user"},"content":{"content_type":"multimodal_text","parts":[{"content_type":"image_asset_pointer","asset_pointer":"file-service://file_00000000a1b2c3d4e5f60718293a4b","width":4,"height":3,"size_bytes":23}],"metadata":{}},"conversation_id":"c-draw-1"}}
+
+data: {"type":"server_ste_metadata","metadata":{"tool_invoked":true,"turn_use_case":"image gen","model_slug":"gpt-5-5"},"conversation_id":"c-draw-1"}
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-tool","author":{"role":"tool"},"metadata":{"async_task_type":"image_gen"},"content":{"content_type":"multimodal_text","parts":[{"content_type":"image_asset_pointer","asset_pointer":"file-service://file_00000000fedcba9876543210fedcba98","width":1024,"height":1024,"size_bytes":98765}]}},"conversation_id":"c-draw-1"}}
+
+data: [DONE]

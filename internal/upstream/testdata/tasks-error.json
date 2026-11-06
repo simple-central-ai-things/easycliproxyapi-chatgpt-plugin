@@ -1,0 +1,14 @@
+{"tasks": [
+  {"task_id": "task-1", "conversation_id": "c-draw-1",
+   "image_gen_message": {
+     "metadata": {"is_error": true},
+     "author": {"role": "assistant"},
+     "content": {"content_type": "text", "parts": ["Image generation failed upstream: provider error"]}
+   }},
+  {"task_id": "task-other", "conversation_id": "c-someone-else",
+   "image_gen_message": {
+     "metadata": {"is_error": true},
+     "author": {"role": "assistant"},
+     "content": {"content_type": "text", "parts": ["unrelated error"]}
+   }}
+]}

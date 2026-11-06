@@ -19,6 +19,21 @@ driver assertions). Opcodes covered: 1,2,3,5,6,7,8,14,15,17(all branches),
 22 (unregistered in the oracle — unknown to it, skipped; see n02).
 No session material: all XOR keys are synthetic.
 
+t18-omap-dump (2026-11-06) pins the op-15 OrderedMap serialization branch
+with a DETERMINISTIC expected_token (unlike r01, whose floats are live):
+the program builds an insertion-ordered map (op 17 create + op 7 adds,
+including a duplicate key that updates in place), dumps it (op 15) and
+gates the committed token on byte-equality with the CPython json.dumps
+default-dialect rendering of the same dict (", " / ": " separators,
+ensure_ascii=True). The driver is a small oracle-equivalent script
+(reconstructs the map as a Python dict and json.dumps it; the reference
+oracle itself cannot dump its OrderedMap — that TypeError is the
+deliberate divergence this vector pins); no wall-clock/RNG anywhere.
+Covers: non-ASCII key/value escapes (\uXXXX), an astral surrogate pair,
+JSON escapes (quote/backslash/tab/newline/DEL \u007f), int + float
+literals at the 1e-4 / 1e-5 repr boundary, true/null, nested object/list
+in insertion order, empty string, duplicate-key position preservation.
+
 r01-live-two-stage (2026-11-06) is a REAL captured challenge (dx + the
 legacy token p used as the XOR key — challenge material only, no account
 credentials; it embeds a client-computed requirements timestamp and the

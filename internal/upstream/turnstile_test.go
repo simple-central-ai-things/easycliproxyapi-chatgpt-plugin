@@ -191,3 +191,38 @@ func TestTurnstileBadOpcode(t *testing.T) {
 		t.Fatal("fixture set lost the unknown-opcode vector")
 	}
 }
+
+// TestTurnstileReplacementCap pins the documented 64-pass bound: a program
+// that re-parses CONTENT-EQUAL text into the program slot on every pass
+// (op 14 always builds a fresh backing array, so each pass is a genuine
+// replacement) restarts until exactly maxTurnstilePasses generations have
+// run, then stops with a typed error instead of hanging.
+func TestTurnstileReplacementCap(t *testing.T) {
+	// Fixed-size content-equal self-replacement: the initial generation
+	// stores the text "[[14,9,100]]" in slot 100 once (op 2), then every
+	// generation re-parses it into the program slot (op 14). Each parse
+	// builds a fresh backing array, so every pass is a restart over
+	// CONTENT-EQUAL text — the exact limitation the cap bounds (see the
+	// main-loop note). No result is ever set, so a capless VM would spin
+	// forever; the bounded one stops after maxTurnstilePasses generations.
+	text := "[[2,100,\"[[14,9,100]]\"],[14,9,100]]"
+	dx := base64.StdEncoding.EncodeToString([]byte(text))
+
+	vm, err := solveTurnstileVM(dx, "")
+	var se *SentinelError
+	if !errors.As(err, &se) || se.Code != "turnstile_unsolved" {
+		t.Fatalf("cap-exhausted solve: err = %v, want turnstile_unsolved", err)
+	}
+	if len(vm.passes) != maxTurnstilePasses {
+		t.Fatalf("passes = %d, want exactly %d (the documented 64-pass bound)",
+			len(vm.passes), maxTurnstilePasses)
+	}
+	if vm.passes[0] != 2 {
+		t.Fatalf("passes[0] = %d tokens, want 2 (the initial generation)", vm.passes[0])
+	}
+	for i := 1; i < len(vm.passes); i++ {
+		if vm.passes[i] != 1 {
+			t.Fatalf("passes[%d] = %d tokens, want 1", i, vm.passes[i])
+		}
+	}
+}

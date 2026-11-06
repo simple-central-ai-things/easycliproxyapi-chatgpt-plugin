@@ -197,8 +197,13 @@ func solveTurnstileVM(dx, p string) (*turnstileVM, error) {
 		// up a program replacement. json-parse and concat always build a
 		// fresh backing array, so backing-pointer identity separates a
 		// genuine replacement from a re-store of the running program.
+		// Known limitation: a stage that re-parses CONTENT-EQUAL program
+		// text into slot 9 (a fresh backing pointer) triggers a restart +
+		// full re-execution; that is bounded by maxTurnstilePasses and
+		// convergent (the re-run is idempotent), so it is not a
+		// correctness defect.
 		if next, ok := vm.env[9].([]any); ok && !sameProgramBacking(next, code) {
-			if len(vm.passes) > maxTurnstilePasses {
+			if len(vm.passes) >= maxTurnstilePasses {
 				break
 			}
 			vm.tracef("program replaced -> pass %d over %d tokens", len(vm.passes), len(next))

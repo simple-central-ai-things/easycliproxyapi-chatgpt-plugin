@@ -88,6 +88,32 @@ func TestConfigRejects(t *testing.T) {
 	}
 }
 
+// TestConfigHostInjectedKeys pins that the host-owned keys CLIProxyAPI v8
+// injects into every plugin's config_yaml (normalizedConfigNode in the
+// host's internal/pluginhost/config.go appends "enabled" and "priority"
+// before handing the block to the plugin) are accepted and ignored — the
+// sibling plugins tolerate them; a fail-closed parser that rejected them
+// would refuse registration of any block the live host sends.
+func TestConfigHostInjectedKeys(t *testing.T) {
+	raw := []byte(
+		"enabled: true\n" +
+			"priority: 0\n" +
+			"tls-mode: stdlib\n" +
+			"model-prefix: chatgpt-proxy\n",
+	)
+	c, err := ParseConfig(raw)
+	if err != nil {
+		t.Fatalf("ParseConfig with host-injected keys: %v", err)
+	}
+	if c.TLSMode != "stdlib" || c.ModelPrefix != "chatgpt-proxy" {
+		t.Errorf("plugin keys drifted next to host keys: %+v", c)
+	}
+	// The rest stays at defaults.
+	if c.RequestTimeoutSecs != 600 || c.ImagePollTimeoutSecs != 120 {
+		t.Errorf("unset defaults drifted: %+v", c)
+	}
+}
+
 // TestConfigOverrides pins that explicit values are honored, so the defaults
 // above are proven to be defaults and not constants.
 func TestConfigOverrides(t *testing.T) {

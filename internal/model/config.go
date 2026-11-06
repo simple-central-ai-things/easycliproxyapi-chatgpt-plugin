@@ -50,6 +50,14 @@ type Config struct {
 // default) from an explicitly-set value, including empty strings, so validation
 // can refuse them instead of silently defaulting.
 type rawConfig struct {
+	// Host-owned keys. CLIProxyAPI v8 injects "enabled" and "priority" into
+	// every plugin's config_yaml before registration (normalizedConfigNode in
+	// the host's internal/pluginhost/config.go); the host, not this plugin,
+	// decides load state and order. Declared only so the fail-closed parser
+	// accepts them; they never leak into Config.
+	Enabled  *bool `yaml:"enabled"`
+	Priority *int  `yaml:"priority"`
+
 	ModelPrefix           *string `yaml:"model-prefix"`
 	ImageModelName        *string `yaml:"image-model-name"`
 	CodexImageModelName   *string `yaml:"codex-image-model-name"`

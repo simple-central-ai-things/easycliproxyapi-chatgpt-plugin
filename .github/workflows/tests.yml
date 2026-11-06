@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.7"
+      - name: go vet
+        run: go vet ./...
+      # Unit tests run first so a config/manager regression fails before the
+      # artifact build; loadsmoke re-runs after the build below.
+      - name: go test
+        run: go test ./...
+      # glibc host build: the CLIProxyAPI container image is Debian-based,
+      # so the .so must be built for glibc (musl fails to dlopen there).
+      # linux/amd64 is the release gate — the only artifact the embedded
+      # EasyCLI host loads. Built BEFORE the loadsmoke step so tests/loadsmoke
+      # dlopen()s the real artifact (it skips when the .so is absent).
+      - name: c-shared build (linux/amd64, glibc host)
+        run: CGO_ENABLED=1 go build -buildmode=c-shared -o plugins/linux/amd64/easycliproxyapi-chatgpt-provider.so .
+      - name: loadsmoke against the real artifact
+        run: go test ./tests/loadsmoke/

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "easycliproxyapi-chatgpt-provider",
+      "name": "ChatGPT Consumer Provider",
+      "description": "ChatGPT consumer-account OAuth provider for EasyCLI/CLIProxyAPI v8: per-credential model discovery, streaming text conversation, image generation/editing (openai + openai-image formats), and subscription quota cards.",
+      "author": "simple-central-ai-things",
+      "version": "0.1.0",
+      "repository": "https://github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin",
+      "homepage": "https://github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin",
+      "license": "MIT",
+      "tags": ["provider", "chatgpt", "oauth", "browser-login", "images", "quota", "streaming"]
+    }
+  ]
+}

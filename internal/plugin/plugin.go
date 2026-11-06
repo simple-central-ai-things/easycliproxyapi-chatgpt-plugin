@@ -1,0 +1,174 @@
+// Package plugin owns the chatgpt-proxy provider's RPC surface: the
+// Manager dispatches every host method, the caller seam carries all host I/O,
+// and the registration/config contracts are pinned by this package's tests.
+//
+// This is the ABI skeleton (Task 1). The identity, the registration envelope
+// and the config surface are the contracts every later task builds on; the
+// protocol implementations (auth, models, executor, quota) land in later
+// tasks and are dispatched from the same Manager.
+package plugin
+
+import (
+	"encoding/json"
+	"fmt"
+	"sync"
+
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
+)
+
+// Identity constants. The pluginID is the .so basename and the registration
+// Name; providerKey is the auth-file type, the model prefix and the routing
+// identity; githubRepo satisfies the host validPlugin gate (it rejects an
+// empty Metadata.GitHubRepository) and is the URL a plugin store polls.
+const (
+	pluginID      = "easycliproxyapi-chatgpt-provider"
+	providerKey   = "chatgpt-proxy"
+	pluginVersion = "0.1.0"
+	githubRepo    = "https://github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin"
+)
+
+// caller is the single host RPC bridge every Manager I/O flows through
+// (host.http.do, host.http.do_stream, host.stream.emit/close, host.log,
+// host.auth.list/get/save, ...). Tests inject a fake; main.go injects the C
+// ABI. This seam is what makes the whole package testable offline.
+type caller interface {
+	Call(method string, request []byte) ([]byte, error)
+}
+
+// Manager owns the served configuration snapshot and routes every RPC method.
+// It is safe for concurrent Handle use. host is immutable after New.
+type Manager struct {
+	host caller
+
+	mu  sync.RWMutex
+	cfg Config
+}
+
+// New returns a Manager whose outbound host calls flow through host. A nil
+// host is refused because the Manager cannot function without the ABI bridge.
+func New(host caller) (*Manager, error) {
+	if host == nil {
+		return nil, fmt.Errorf("host caller is required")
+	}
+	return &Manager{host: host}, nil
+}
+
+// Handle dispatches one RPC method and returns envelope bytes. Handler
+// failures travel inside the envelope; a recovered panic becomes a
+// plugin_error envelope so the host process never dies with us.
+func (m *Manager) Handle(method string, request []byte) (resp []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			resp = errEnvelope(typedErr("plugin_error", fmt.Sprintf("internal error handling %s", method)))
+			err = nil
+		}
+	}()
+
+	switch method {
+	case pluginabi.MethodPluginRegister, pluginabi.MethodPluginReconfigure:
+		return m.handleLifecycle(request)
+	case pluginabi.MethodAuthIdentifier:
+		return ok(map[string]string{"identifier": providerKey}), nil
+	case pluginabi.MethodExecutorIdentifier:
+		return ok(map[string]string{"identifier": providerKey}), nil
+	case pluginabi.MethodQuotaIdentifier:
+		return ok(map[string]string{"identifier": providerKey}), nil
+	case pluginabi.MethodQuotaDescribe:
+		// Static metadata: the quota surface renders on the host's native
+		// auth-file cards; this cannot fail.
+		return ok(pluginapi.QuotaDescribeResponse{
+			SupportedProviders: []string{providerKey},
+			DisplayName:        "ChatGPT (chatgpt-proxy)",
+			SupportsReset:      false,
+		}), nil
+	case pluginabi.MethodPluginQuiesce, pluginabi.MethodPluginShutdown:
+		return m.handleShutdown()
+	default:
+		return errEnvelope(typedErr("unknown_method", "unknown method: "+method, 404)), nil
+	}
+}
+
+// lifecycleRequest mirrors rpcLifecycleRequest: config_yaml is base64. The
+// request's schema_version is decoded-and-ignored; registration echoes
+// pluginabi.SchemaVersion.
+type lifecycleRequest struct {
+	ConfigYAML    []byte `json:"config_yaml"`
+	SchemaVersion uint32 `json:"schema_version"`
+}
+
+// handleLifecycle implements plugin.register / plugin.reconfigure: parse and
+// validate the config fail-closed, then publish the served snapshot and reply
+// with the registration envelope. Later tasks extend this to reconcile auth
+// and warm the model catalog; the contract (typed errors in the envelope, no
+// Go errors) is already pinned here.
+func (m *Manager) handleLifecycle(request []byte) ([]byte, error) {
+	var req lifecycleRequest
+	if err := json.Unmarshal(request, &req); err != nil {
+		return errEnvelope(typedErr("invalid_request", "malformed lifecycle request body", 400)), nil
+	}
+	cfg, err := ParseConfig(req.ConfigYAML)
+	if err != nil {
+		return errEnvelope(typedErr("invalid_config", err.Error(), 400)), nil
+	}
+	m.mu.Lock()
+	m.cfg = cfg
+	m.mu.Unlock()
+	return registrationEnvelope(), nil
+}
+
+// handleShutdown clears the served snapshot. Idempotent: the C glue may call
+// the shutdown export after plugin.shutdown has already run.
+func (m *Manager) handleShutdown() ([]byte, error) {
+	m.mu.Lock()
+	m.cfg = Config{}
+	m.mu.Unlock()
+	return ok(struct{}{}), nil
+}
+
+// capabilities is the exact capability surface the registration publishes.
+// The host decodes this into its rpcCapabilities; unset capability booleans
+// default to false, so the seven fields below are the complete surface.
+type capabilities struct {
+	AuthProvider          bool                         `json:"auth_provider"`
+	ModelProvider         bool                         `json:"model_provider"`
+	Executor              bool                         `json:"executor"`
+	ExecutorModelScope    pluginapi.ExecutorModelScope `json:"executor_model_scope"`
+	ExecutorInputFormats  []string                     `json:"executor_input_formats"`
+	ExecutorOutputFormats []string                     `json:"executor_output_formats"`
+	QuotaProvider         bool                         `json:"quota_provider"`
+}
+
+// registrationResult is the rpcRegistration-shaped body the host expects for
+// plugin.register / plugin.reconfigure.
+type registrationResult struct {
+	SchemaVersion uint32             `json:"schema_version"`
+	Metadata      pluginapi.Metadata `json:"metadata"`
+	Capabilities  capabilities       `json:"capabilities"`
+}
+
+// registrationEnvelope builds the success envelope for register/reconfigure:
+// schema_version echo, the pinned identity (with a non-empty GitHubRepository
+// for the host validPlugin gate), and the exact capability surface.
+func registrationEnvelope() []byte {
+	formats := []string{"openai", "openai-image"}
+	return ok(registrationResult{
+		SchemaVersion: pluginabi.SchemaVersion,
+		Metadata: pluginapi.Metadata{
+			Name:             pluginID,
+			Version:          pluginVersion,
+			Author:           pluginID,
+			GitHubRepository: githubRepo,
+			ConfigFields:     []pluginapi.ConfigField{},
+		},
+		Capabilities: capabilities{
+			AuthProvider:          true,
+			ModelProvider:         true,
+			Executor:              true,
+			ExecutorModelScope:    pluginapi.ExecutorModelScopeOAuth,
+			ExecutorInputFormats:  formats,
+			ExecutorOutputFormats: formats,
+			QuotaProvider:         true,
+		},
+	})
+}

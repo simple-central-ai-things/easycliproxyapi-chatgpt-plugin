@@ -116,3 +116,40 @@ Chosen default TLSMode: `stdlib`
   management panel's paste input is in the host's management-center asset
   (`management.html`, v1.27.3): the provider auth modal's callback field
   POSTs `{provider, redirect_url}` to `/oauth/callback`.
+
+## Live serving verification (2026-11-06)
+
+The dedicated spike above was superseded in substance by real serving against
+a live ChatGPT Plus account (a credential logged in through the panel's OAuth
+bridge, plan persisted as `plus`):
+
+- **TLS verdict — resolved by serving:** real `POST /v1/chat/completions` and
+  `POST /v1/images/generations` calls reached `chatgpt.com` over the stdlib
+  default TLS hello and returned **HTTP 200** — no 403 / Cloudflare
+  interstitial. So leg (a) of the spike table is effectively answered:
+  **keep `tls-mode: stdlib`**; the utls/x-net leg (b) is unused-but-retained.
+  (The table cells are left `PENDING RUN` only because the standalone
+  `live_tls_test.go` was not re-run; serving is stronger evidence.)
+- **Turnstile multi-stage fix (`a118860`):** the first real text turn failed
+  with `turnstile_unsolved`. Root cause: the live challenge is a
+  self-modifying multi-stage program — stage 1 parses a NEW program into the
+  data slot the VM loop executes, and a later stage serializes the
+  fingerprint OrderedMap. The reference oracle's `for token in token_list`
+  never executes the replacement and its `OrderedMap` makes `json.dumps`
+  raise, so the faithful Go port (correctly) matched the oracle — neither
+  solved it. The fix re-reads program slot 9 after every token and restarts
+  from index 0 on a genuine replacement (backing-pointer identity, capped at
+  64 passes), and op 15 serializes OrderedMap contents (JSON.stringify
+  semantics, depth-guarded). Regression fixture `r01-live-two-stage` (a real
+  dx+p, secret-scanned) pins the `[89 505 5]` pass chain; all 28 synthetic
+  differential vectors stay byte-exact green.
+- **Text:** `POST /v1/chat/completions` (`chatgpt-proxy/openai/gpt-5-6-mini`,
+  "Reply with exactly: PONG") → **HTTP 200** with assistant content, 3×
+  consecutive (including with the debug hook disarmed).
+- **Image:** `POST /v1/images/generations` (`chatgpt-proxy/gpt-image-2-proxy`)
+  → **HTTP 200**, 1 image, ~1.1 MB, valid PNG magic (`89 50 4e 47 0d 0a 1a
+  0a`).
+
+These confirm the register → login → models → text turn → image turn chain
+end-to-end on the live gateway. The remaining operator-gated items are the
+formal standalone spike runs, not blockers.

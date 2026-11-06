@@ -4,8 +4,9 @@ package plugin
 // provider serves: the host wire request decode, the dispatch handlers
 // (executor.execute / executor.execute_stream), the 401 refresh-retry loop
 // (Review Focus #3) and the typed upstream-failure → envelope mapping
-// (the error-class table pinned by the plan). The OpenAI text format lands
-// in executor_text.go; the openai-image format lands in Task 13.
+// (the error-class table pinned by the plan). The OpenAI text format lives in
+// executor_text.go; the openai-image format (the host's /v1/images/generations
+// and /v1/images/edits, arriving untranslated) lives in executor_image.go.
 //
 // The 401 contract: when the turn START (sentinel handshake or the
 // conversation stream start) fails with a typed invalid_token, the executor
@@ -60,6 +61,9 @@ func (m *Manager) handleExecutorExecute(request []byte) ([]byte, error) {
 	if err != nil {
 		return errEnvelope(err), nil
 	}
+	if isImageRequest(req) {
+		return m.executeImage(req)
+	}
 	turn, err := m.prepareTextTurn(req)
 	if err != nil {
 		return errEnvelope(err), nil
@@ -94,6 +98,9 @@ func (m *Manager) handleExecutorExecuteStream(request []byte) ([]byte, error) {
 	if strings.TrimSpace(req.StreamID) == "" {
 		return errEnvelope(typedErr("invalid_stream", "downstream stream id missing", 400)), nil
 	}
+	if isImageRequest(req) {
+		return m.executeImageStream(req)
+	}
 	turn, err := m.prepareTextTurn(req)
 	if err != nil {
 		return errEnvelope(err), nil
@@ -123,10 +130,8 @@ func decodeExecutorRequest(request []byte) (executorRequest, *pluginabi.Error) {
 	if req.AuthProvider != "" && req.AuthProvider != providerKey {
 		return req, typedErr("invalid_credential", "wrong provider credential", 401)
 	}
-	if req.Format != "" && req.Format != "openai" {
-		// The openai-image format is Task 13's surface; refuse it
-		// cleanly instead of crashing.
-		return req, typedErr("unsupported_protocol", "requires the openai executor format", 400)
+	if req.Format != "" && req.Format != "openai" && req.Format != "openai-image" {
+		return req, typedErr("unsupported_protocol", "requires the openai or openai-image executor format", 400)
 	}
 	return req, nil
 }

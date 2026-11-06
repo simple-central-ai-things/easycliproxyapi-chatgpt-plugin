@@ -26,9 +26,10 @@ published port: the plugin loads inside the host process.
 
 The protocol implementation lands incrementally: the credential lifecycle
 (auth parse/refresh, browser OAuth login), the per-credential model catalog,
-the quota cards and the OpenAI-format text conversation executor (streaming
-and non-streaming) are in place; the `openai-image` executor surface lands
-next. See `docs/tasks/` for the workstream state.
+the quota cards, the OpenAI-format text conversation executor (streaming and
+non-streaming) and the `openai-image` executor surface (image generation and
+editing routed by model base name to the web-drawing and codex pipelines) are
+in place. See `docs/tasks/` for the workstream state.
 
 ## Layout
 

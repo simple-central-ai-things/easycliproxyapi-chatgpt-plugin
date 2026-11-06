@@ -4,8 +4,9 @@
 //
 // This is the ABI skeleton (Task 1). The identity, the registration envelope
 // and the config surface are the contracts every later task builds on; the
-// protocol implementations (auth, models, executor, quota) land in later
-// tasks and are dispatched from the same Manager.
+// protocol implementations land in later tasks and are dispatched from the
+// same Manager. auth.parse / auth.refresh (Task 3) claim type=chatgpt-proxy
+// credential records and run the OAuth refresh_token lifecycle.
 package plugin
 
 import (
@@ -82,6 +83,10 @@ func (m *Manager) Handle(method string, request []byte) (resp []byte, err error)
 			DisplayName:        "ChatGPT (chatgpt-proxy)",
 			SupportsReset:      false,
 		}), nil
+	case pluginabi.MethodAuthParse:
+		return m.handleAuthParse(request)
+	case pluginabi.MethodAuthRefresh:
+		return m.handleAuthRefresh(request)
 	case pluginabi.MethodPluginQuiesce, pluginabi.MethodPluginShutdown:
 		return m.handleShutdown()
 	default:

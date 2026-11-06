@@ -24,6 +24,16 @@ const (
 	oauthAuthorizeBase = "https://auth.openai.com"
 	// oauthAuthorizePath is the consumer authorize endpoint.
 	oauthAuthorizePath = "/api/accounts/authorize"
+	// oauthLoginRedirectURI is the OpenAI platform client's registered
+	// redirect URI: auth0 rejects any authorize request whose redirect_uri
+	// is not on the client's allowlist (live 2026-11-06 — the host's
+	// computed loopback callback was refused with
+	// invalid_authorize_request). After approving, the browser lands here
+	// with ?code=...&state=... and the user pastes the full address-bar
+	// URL into the management panel's OAuth callback field; the host's
+	// oauth/callback handler then writes the .oauth-<provider>-<state>.oauth
+	// file that loginPoll reads.
+	oauthLoginRedirectURI = "https://platform.openai.com/auth/callback"
 	// oauthLoginTokenURL exchanges the one-time auth code for the token triple.
 	oauthLoginTokenURL = "https://auth.openai.com/api/accounts/oauth/token"
 	// chatgptMeURL verifies the fresh access token and yields the account
@@ -102,25 +112,6 @@ func validateAuthorizeURL(raw string) error {
 	return nil
 }
 
-// validateRedirectBaseURL refuses anything that is not the host's own
-// loopback callback URL (http(s)://127.0.0.1|localhost|::1:<port>/...). The
-// host computes it from its own port and runs the management API without TLS,
-// so loopback http is the valid production shape; non-loopback hosts never
-// become a redirect_uri.
-func validateRedirectBaseURL(raw string) error {
-	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
-		u.User != nil || u.Fragment != "" {
-		return errors.New("invalid redirect base URL")
-	}
-	switch u.Hostname() {
-	case "127.0.0.1", "localhost", "::1":
-	default:
-		return errors.New("redirect base URL must target the host's loopback callback")
-	}
-	return nil
-}
-
 // pkcePair returns a 48-random-byte verifier (base64url) and its S256
 // challenge: BASE64URL(SHA256(ASCII(verifier))).
 func pkcePair() (string, string, error) {
@@ -160,17 +151,17 @@ func gcExpiredLoginAttempts(logins map[string]loginAttempt) {
 	}
 }
 
-// handleLoginStart implements auth.login.start: it validates the host
-// callback URL, builds the pinned authorize URL with a fresh PKCE pair and
-// state, records the attempt (capped, GC'd) and returns it. No transport
+// handleLoginStart implements auth.login.start: it builds the pinned
+// authorize URL with a fresh PKCE pair and state, records the attempt
+// (capped, GC'd) and returns it. The host-provided BaseURL is parsed but
+// deliberately ignored for the redirect: the OpenAI platform client only
+// accepts its registered redirect URI (oauthLoginRedirectURI), so the
+// redirect_uri is pinned regardless of what the host sends. No transport
 // call is made — the browser, not the host, completes the flow.
 func (m *Manager) handleLoginStart(request []byte) ([]byte, error) {
 	var req loginStartRequest
 	if err := json.Unmarshal(request, &req); err != nil {
 		return errEnvelope(typedErr("invalid_request", "malformed auth.login.start request", 400)), nil
-	}
-	if err := validateRedirectBaseURL(req.BaseURL); err != nil {
-		return errEnvelope(typedErr("invalid_request", err.Error(), 400)), nil
 	}
 
 	verifier, challenge, err := pkcePair()
@@ -185,7 +176,7 @@ func (m *Manager) handleLoginStart(request []byte) ([]byte, error) {
 	query := url.Values{}
 	query.Set("client_id", oauthClientID)
 	query.Set("response_type", "code")
-	query.Set("redirect_uri", req.BaseURL)
+	query.Set("redirect_uri", oauthLoginRedirectURI)
 	query.Set("scope", oauthLoginScope)
 	query.Set("audience", oauthLoginAudience)
 	query.Set("code_challenge", challenge)
@@ -206,7 +197,7 @@ func (m *Manager) handleLoginStart(request []byte) ([]byte, error) {
 		m.loginMu.Unlock()
 		return errEnvelope(typedErr("too_many_logins", "too many concurrent sign-in attempts", 429)), nil
 	}
-	m.logins[state] = loginAttempt{verifier: verifier, redirectURI: req.BaseURL, expiresAt: expiresAt}
+	m.logins[state] = loginAttempt{verifier: verifier, redirectURI: oauthLoginRedirectURI, expiresAt: expiresAt}
 	m.loginMu.Unlock()
 
 	return ok(pluginapi.AuthLoginStartResponse{

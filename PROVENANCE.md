@@ -87,3 +87,32 @@ Chosen default TLSMode: `stdlib`
   the graph maximum, already required by the SDK). Test-only today; a `utls`
   verdict promotes it to a SECOND production dependency needing controller
   sign-off (see Verdict above).
+
+## OAuth login — registered-redirect fix (2026-11-06)
+
+- **Live attempt 2026-11-06 (operator verification):** `auth.login.start`
+  built the authorize URL with the host-computed loopback callback as
+  `redirect_uri` (`http://127.0.0.1:<port>/v8/management/oauth/callback`).
+  OpenAI's auth0 endpoint rejected it live with
+  `{"error":{"code":"invalid_authorize_request","message":"Invalid authorize request"}}`
+  — the platform client `app_2SKx67EdpoN0G6j64rFvigXD` only allows its
+  REGISTERED redirect URIs, and the host's loopback is not one of them.
+- **Fix:** pin `redirect_uri` to the registered
+  `https://platform.openai.com/auth/callback` and ignore the host `BaseURL`
+  for the redirect (the token exchange sends the same pinned URI — the
+  OAuth2 redirect_uri binding). This is the proven model of the MIT
+  reference `basketikun/chatgpt2api` (`services/oauth_login_service.py`):
+  after approving, the user's browser lands on the registered URL with
+  `?code=...&state=...` and the user copies the full address-bar URL into
+  the EasyCLI management panel's OAuth paste field.
+- **Paste-back verified against the host:** CLIProxyAPI v8.0.0 SDK
+  `internal/api/handlers/management/oauth_callback.go` (`PostOAuthCallback`
+  parses `code`/`state`/`error` from the pasted `redirect_url`'s query
+  string, lines 55–74) and `oauth_sessions.go` (`writeOAuthCallbackFile`
+  publishes `<authDir>/.oauth-<provider>-<state>.oauth` with
+  `{"code","state","error"}` — exactly the file the plugin's
+  `auth.login.poll` reads; the plugin session is registered by
+  `ServePluginAuthURL` in `auth_files_oauth_callback.go:213`). The
+  management panel's paste input is in the host's management-center asset
+  (`management.html`, v1.27.3): the provider auth modal's callback field
+  POSTs `{provider, redirect_url}` to `/oauth/callback`.

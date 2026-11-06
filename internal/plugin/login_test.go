@@ -17,7 +17,10 @@ import (
 
 // The loopback callback URL the host computes for its OAuth callback handler
 // (internal/api/handlers/management/auth_files_oauth_callback.go builds
-// http(s)://127.0.0.1:<port>/v0/management/oauth-callback from its own port).
+// http(s)://127.0.0.1:<port>/v0/management/oauth-callback from its own port)
+// and sends as BaseURL in auth.login.start. The plugin IGNORES it for the
+// redirect_uri (auth0 only accepts the client's registered redirect URI);
+// these tests exercise it as the wire value the host would carry.
 const testBaseURL = "http://127.0.0.1:8317/v0/management/oauth-callback"
 
 // loginStartRequestBody mirrors the host wire shape of auth.login.start: the
@@ -112,8 +115,10 @@ func startLogin(t *testing.T, host caller, baseURL, authDir string) (*Manager, p
 // TestStartURLShape pins the authorize URL wire contract: exactly the eight
 // pinned query parameters (nothing more, nothing less), the PKCE pair
 // (48-byte verifier, S256 challenge), a state the host's ValidateOAuthState
-// accepts, the loopback redirect_uri returned untouched, and a 10-minute
-// expiry. Building the URL never touches the transport seam.
+// accepts, the pinned registered redirect_uri (the OpenAI platform client
+// only allows its registered redirect URIs — the host BaseURL never
+// travels), and a 10-minute expiry. Building the URL never touches the
+// transport seam.
 func TestStartURLShape(t *testing.T) {
 	fake := &httpFakeCaller{}
 	m, out := startLogin(t, fake, testBaseURL, t.TempDir())
@@ -149,8 +154,8 @@ func TestStartURLShape(t *testing.T) {
 	if got := q.Get("response_type"); got != "code" {
 		t.Errorf("response_type = %q, want code", got)
 	}
-	if got := q.Get("redirect_uri"); got != testBaseURL {
-		t.Errorf("redirect_uri = %q, want the host callback %q", got, testBaseURL)
+	if got := q.Get("redirect_uri"); got != oauthLoginRedirectURI {
+		t.Errorf("redirect_uri = %q, want the pinned registered %q", got, oauthLoginRedirectURI)
 	}
 	if got := q.Get("scope"); got != "openid profile email offline_access" {
 		t.Errorf("scope = %q, want the pinned consumer scope", got)
@@ -198,12 +203,13 @@ func TestStartURLShape(t *testing.T) {
 	}
 }
 
-// TestStartOriginValidation pins the origin guards: the authorize URL we build
-// must sit on exactly https://auth.openai.com (mistral's validateProviderURL
-// pattern applied to our own redirect construction), and a mutated BaseURL —
-// http:// on a non-loopback host, a wrong host, or not a URL at all — is
-// refused with a typed error before any host call and without recording an
-// attempt.
+// TestStartOriginValidation pins the origin guard and the BaseURL contract:
+// the authorize URL we build must sit on exactly https://auth.openai.com
+// (mistral's validateProviderURL pattern applied to our own redirect
+// construction), and the host-provided BaseURL — loopback or not — is
+// ignored for the redirect: every variant starts cleanly without touching
+// the transport and the constructed URL always carries the pinned
+// registered redirect_uri.
 func TestStartOriginValidation(t *testing.T) {
 	t.Run("authorize URL mutations refused", func(t *testing.T) {
 		cases := []struct {
@@ -230,17 +236,25 @@ func TestStartOriginValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("mutated BaseURL refused before any host call", func(t *testing.T) {
+	t.Run("BaseURL ignored for the redirect", func(t *testing.T) {
+		// The OpenAI platform client only allows its registered redirect
+		// URIs, so the host-computed BaseURL (loopback or otherwise) must
+		// never leak into the authorize URL: every variant starts cleanly,
+		// without any host call, and the constructed URL carries the pinned
+		// registered redirect_uri.
 		cases := []struct {
 			name    string
 			baseURL string
 		}{
+			{"host loopback callback", testBaseURL},
+			{"https loopback", "https://127.0.0.1:8317/v0/management/oauth-callback"},
+			{"localhost", "http://localhost:8317/v0/management/oauth-callback"},
+			{"ipv6 loopback", "http://[::1]:8317/v0/management/oauth-callback"},
 			{"http non-loopback", "http://evil.example/oauth-callback"},
 			{"https non-loopback", "https://evil.example/oauth-callback"},
-			{"wrong host any scheme", "http://example.com/oauth-callback"},
+			{"userinfo", "http://user@127.0.0.1:8317/callback"},
 			{"relative URL", "/v0/management/oauth-callback"},
 			{"not a URL", "evil.example callback"},
-			{"userinfo", "http://user@127.0.0.1:8317/callback"},
 			{"empty", ""},
 		}
 		for _, tc := range cases {
@@ -251,38 +265,21 @@ func TestStartOriginValidation(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Handle(auth.login.start): %v", err)
 				}
-				env := decodeErrorEnvelope(t, resp)
-				if env.Error.Code != "invalid_request" {
-					t.Errorf("error code = %q, want invalid_request", env.Error.Code)
-				}
-				if strings.Contains(string(resp), tc.baseURL) && tc.baseURL != "" {
-					t.Errorf("refusal envelope must not echo the mutated BaseURL: %s", resp)
-				}
+				out := decodeLoginStart(t, resp)
 				if len(fake.calls) != 0 {
-					t.Errorf("refused start must not touch the host transport: %v", fake.methods())
+					t.Errorf("login.start must not touch the host transport: %v", fake.methods())
 				}
-				m.loginMu.Lock()
-				recorded := len(m.logins)
-				m.loginMu.Unlock()
-				if recorded != 0 {
-					t.Errorf("refused start must not record an attempt (got %d)", recorded)
+				u, errParse := url.Parse(out.URL)
+				if errParse != nil {
+					t.Fatalf("authorize URL does not parse: %v", errParse)
+				}
+				if got := u.Query().Get("redirect_uri"); got != oauthLoginRedirectURI {
+					t.Errorf("redirect_uri = %q, want the pinned registered %q (BaseURL ignored)", got, oauthLoginRedirectURI)
+				}
+				if tc.baseURL != "" && strings.Contains(out.URL, url.QueryEscape(tc.baseURL)) {
+					t.Errorf("authorize URL must not carry the host BaseURL: %s", out.URL)
 				}
 			})
-		}
-	})
-
-	t.Run("loopback callback accepted", func(t *testing.T) {
-		// The host's own callback URL is loopback http(s); refusing it would
-		// kill the deployed flow (the host management API runs without TLS).
-		for _, baseURL := range []string{
-			testBaseURL,
-			"https://127.0.0.1:8317/v0/management/oauth-callback",
-			"http://localhost:8317/v0/management/oauth-callback",
-			"http://[::1]:8317/v0/management/oauth-callback",
-		} {
-			if _, out := startLogin(t, &httpFakeCaller{}, baseURL, t.TempDir()); out.URL == "" {
-				t.Fatalf("valid loopback BaseURL %q must produce an authorize URL", baseURL)
-			}
 		}
 	})
 }
@@ -305,7 +302,7 @@ func TestPollPendingWhenFileMissing(t *testing.T) {
 		{"empty auth dir", start.State, func() {
 			m.loginMu.Lock()
 			m.logins["empty-authdir-state-00000000000000000"] = loginAttempt{
-				verifier: "verifier", redirectURI: testBaseURL, expiresAt: time.Now().Add(time.Minute),
+				verifier: "verifier", redirectURI: oauthLoginRedirectURI, expiresAt: time.Now().Add(time.Minute),
 			}
 			m.loginMu.Unlock()
 		}},
@@ -469,7 +466,7 @@ func TestPollSuccessConsumesAttempt(t *testing.T) {
 		"grant_type":    "authorization_code",
 		"code":          "auth-code-123",
 		"code_verifier": verifier,
-		"redirect_uri":  testBaseURL,
+		"redirect_uri":  oauthLoginRedirectURI,
 	}
 	if len(exchangeBody) != len(wantBody) {
 		t.Errorf("exchange body has %d fields, want exactly %d: %v", len(exchangeBody), len(wantBody), exchangeBody)
@@ -688,7 +685,7 @@ func TestPollCap(t *testing.T) {
 		m.loginMu.Lock()
 		for i := 0; i < 10; i++ {
 			m.logins[expiredState(i)] = loginAttempt{
-				verifier: "verifier", redirectURI: testBaseURL, expiresAt: time.Now().Add(-time.Minute),
+				verifier: "verifier", redirectURI: oauthLoginRedirectURI, expiresAt: time.Now().Add(-time.Minute),
 			}
 		}
 		m.loginMu.Unlock()

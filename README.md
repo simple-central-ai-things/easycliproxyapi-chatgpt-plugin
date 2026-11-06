@@ -150,6 +150,24 @@ the code.
   `web|codex|oauth_login`. Auth-file names are stable hashes — never an
   email. Host-managed keys (`label`, `disabled`, `priority`, ...) travel
   in metadata and survive refresh rewrites untouched.
+- OAuth login (browser sign-in from the management panel):
+  `auth.login.start` builds the authorize URL against exactly
+  `https://auth.openai.com/api/accounts/authorize` with the pinned
+  registered `redirect_uri`
+  `https://platform.openai.com/auth/callback` — the OpenAI platform
+  client only allows its registered redirect URIs, so the host-computed
+  loopback callback (sent as `BaseURL`) is ignored (auth0 rejects it).
+  PKCE (S256) plus a 32-char alphanumeric state (inside the host's
+  `ValidateOAuthState` charset) guard the flow; one sign-in window lasts
+  10 minutes. After approving, the browser lands on
+  `https://platform.openai.com/auth/callback?code=...&state=...`; the
+  user copies that full address-bar URL and pastes it into the EasyCLI
+  management panel's OAuth paste field. The host's `oauth/callback`
+  handler extracts `code`/`state` from the pasted URL's query string and
+  writes the host callback file; the plugin's `auth.login.poll` then
+  exchanges the one-time code (with the same pinned `redirect_uri`) and
+  verifies the account before returning the credential. No loopback port
+  is reachable for the redirect, by design.
 - Executor surface (text, `openai` format): conversation turns arrive as
   `executor.execute` / `executor.execute_stream` in the `openai` format.
   Model resolution strips the `chatgpt-proxy/openai/` prefix to the
@@ -281,9 +299,13 @@ artifact.
 4. Restart the gateway; the startup log must show
    `plugin registered plugin_id=easycliproxyapi-chatgpt-provider`.
 5. Sign in once with a ChatGPT consumer account through the panel's OAuth
-   login. The credential lands in EasyCLI's auth files
-   (`type: "chatgpt-proxy"`, stable hashed name) and the host pool owns it
-   from there (rotation, retry, enable/disable on the panel).
+   login: open the panel's authorize URL, approve, and when the browser
+   lands on `https://platform.openai.com/auth/callback?code=...&state=...`
+   copy that full address-bar URL and paste it into the panel's OAuth
+   paste field — the plugin then exchanges the code. The credential
+   lands in EasyCLI's auth files (`type: "chatgpt-proxy"`, stable hashed
+   name) and the host pool owns it from there (rotation, retry,
+   enable/disable on the panel).
 
 The models then publish through SCPM's catalog: `routing.yaml` maps the
 `chatgpt-proxy/` namespace to the `chatgpt-proxy` plan tag

@@ -2,6 +2,24 @@
 
 This file records user-facing release summaries.
 
+## Unreleased
+
+- Fixed: the first real text turn on accounts that receive a turnstile
+  challenge failed with `turnstile_unsolved` (HTTP 502). The live
+  challenges are self-modifying multi-stage programs — stage 1 parses a
+  new program into the data slot the VM executes, and a later stage dumps
+  the fingerprint map — while the reference solver only ever executes the
+  initial program and cannot serialize its OrderedMap. The VM now
+  executes each replacement program from its first token (bounded chain)
+  and op 15 serializes OrderedMap contents (JSON.stringify semantics).
+  Pinned by the real-challenge fixture `r01-live-two-stage`
+  (`internal/upstream/testdata/turnstile/vectors.json`); verified
+  end-to-end against a live account (200 + assistant content).
+- Added: an operator-only turnstile capture hook — set
+  `CHATGPT_PROXY_DEBUG_TURNSTILE` to a writable directory and every solve
+  appends one JSON capture (dx, XOR key, decoded program, execution
+  trace, failure code; never the produced token). Unset = fully inert.
+
 ## v0.1.0 — 2026-11-06 (initial release)
 
 First tagged release of the chatgpt-proxy provider: a Go `c-shared` plugin

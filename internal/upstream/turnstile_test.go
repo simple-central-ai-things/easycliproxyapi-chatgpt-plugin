@@ -1,6 +1,7 @@
 package upstream
 
 import (
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
@@ -14,6 +15,15 @@ type turnstileVector struct {
 	OracleNull       bool
 	GoError          string // expected SentinelError code for oracle-null vectors
 	ExpectedOmapAdds [][]string
+	// ExpectResult marks a vector whose token is NOT deterministic (live
+	// challenges embed wall-clock/RNG-derived fingerprint floats): the VM
+	// must still solve it. Pairs with ExpectedPasses (the multi-stage
+	// chain) and ExpectedPlainPrefix/PlainXORKey (the token's stable
+	// plaintext head).
+	ExpectedPlainPrefix string
+	PlainXORKey         string
+	ExpectResult        bool
+	ExpectedPasses      []int
 }
 
 func loadTurnstileVectors(t *testing.T) []turnstileVector {
@@ -39,15 +49,36 @@ func loadTurnstileVectors(t *testing.T) []turnstileVector {
 				v.ExpectedOmapAdds = append(v.ExpectedOmapAdds, []string{entry[0].(string), entry[1].(string)})
 			}
 		}
+		if er, ok := fixtureFieldOpt(obj, "expect_result"); ok {
+			v.ExpectResult = er.(bool)
+		}
+		if passes, ok := fixtureFieldOpt(obj, "expected_passes"); ok {
+			for _, n := range passes.([]any) {
+				switch num := n.(type) {
+				case int:
+					v.ExpectedPasses = append(v.ExpectedPasses, num)
+				case float64:
+					v.ExpectedPasses = append(v.ExpectedPasses, int(num))
+				}
+			}
+		}
+		if prefix, ok := fixtureFieldOpt(obj, "expected_plain_prefix"); ok {
+			v.ExpectedPlainPrefix = prefix.(string)
+		}
+		if key, ok := fixtureFieldOpt(obj, "plain_xor_key"); ok {
+			v.PlainXORKey = key.(string)
+		}
 		out = append(out, v)
 	}
 	return out
 }
 
-// TestTurnstileOpcodes runs every positive fixture vector through the Go VM
-// and requires the byte-identical token. Each fixture program chains op-20
-// equality gates (see testdata/turnstile/_note.txt), so the token is only
-// reachable when each exercised opcode produced the oracle's exact state.
+// TestTurnstileOpcodes runs every positive fixture vector through the Go VM.
+// Vectors with an expected_token require the byte-identical token (the
+// synthetic programs are fully deterministic). Live-challenge vectors
+// (expect_result) embed wall-clock/RNG-derived fingerprint floats, so only
+// the solve outcome, the multi-stage pass chain and the token's stable
+// plaintext head are asserted — see testdata/turnstile/_note.txt.
 func TestTurnstileOpcodes(t *testing.T) {
 	for _, v := range loadTurnstileVectors(t) {
 		if v.OracleNull {
@@ -57,6 +88,46 @@ func TestTurnstileOpcodes(t *testing.T) {
 			vm, err := solveTurnstileVM(v.DX, v.P)
 			if err != nil {
 				t.Fatalf("solveTurnstileVM: %v", err)
+			}
+			if v.ExpectResult {
+				if vm.result == "" {
+					t.Fatal("turnstile VM produced no token for an expect_result vector")
+				}
+				if len(v.ExpectedPasses) > 0 {
+					if len(vm.passes) != len(v.ExpectedPasses) {
+						t.Fatalf("pass chain = %v, want %v", vm.passes, v.ExpectedPasses)
+					}
+					for i := range vm.passes {
+						if vm.passes[i] != v.ExpectedPasses[i] {
+							t.Fatalf("pass chain = %v, want %v", vm.passes, v.ExpectedPasses)
+						}
+					}
+				}
+				if v.ExpectedPlainPrefix != "" {
+					inner, decErr := base64.StdEncoding.DecodeString(vm.result)
+					if decErr != nil {
+						t.Fatalf("token is not base64: %v", decErr)
+					}
+					plain := make([]byte, len(inner))
+					keyRunes := []rune(v.PlainXORKey)
+					for i, b := range inner {
+						plain[i] = byte(rune(b) ^ keyRunes[i%len(keyRunes)])
+					}
+					if len(plain) < len(v.ExpectedPlainPrefix) ||
+						string(plain[:len(v.ExpectedPlainPrefix)]) != v.ExpectedPlainPrefix {
+						t.Fatalf("token plaintext head mismatch:\n got: %q\nwant: %q",
+							string(plain[:min(len(plain), len(v.ExpectedPlainPrefix)+8)]), v.ExpectedPlainPrefix)
+					}
+				}
+				// The public wrapper returns the same token with no error.
+				token, err := SolveTurnstile(v.DX, v.P)
+				if err != nil {
+					t.Fatalf("SolveTurnstile: %v", err)
+				}
+				if token == "" {
+					t.Fatal("SolveTurnstile returned an empty token")
+				}
+				return
 			}
 			if vm.result != *v.ExpectedToken {
 				t.Fatalf("turnstile token mismatch:\n got: %s\nwant: %s", vm.result, *v.ExpectedToken)

@@ -221,6 +221,18 @@ func appendPyJSONDefault(dst []byte, value any) ([]byte, error) {
 }
 
 func appendPyJSON(dst []byte, value any, ascii bool, itemSep, kvSep string) ([]byte, error) {
+	return appendPyJSONDepth(dst, value, ascii, itemSep, kvSep, 0)
+}
+
+// maxPyJSONDepth mirrors Python's circular-reference guard: json.dumps
+// raises ValueError beyond ~1000 nesting levels; the VM swallows it. The
+// port fails at a bounded depth instead of overflowing the stack.
+const maxPyJSONDepth = 256
+
+func appendPyJSONDepth(dst []byte, value any, ascii bool, itemSep, kvSep string, depth int) ([]byte, error) {
+	if depth > maxPyJSONDepth {
+		return nil, fmt.Errorf("json value nested beyond %d levels (circular reference?)", maxPyJSONDepth)
+	}
 	switch v := value.(type) {
 	case nil:
 		return append(dst, "null"...), nil
@@ -249,7 +261,7 @@ func appendPyJSON(dst []byte, value any, ascii bool, itemSep, kvSep string) ([]b
 				dst = append(dst, itemSep...)
 			}
 			var err error
-			dst, err = appendPyJSON(dst, item, ascii, itemSep, kvSep)
+			dst, err = appendPyJSONDepth(dst, item, ascii, itemSep, kvSep, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -268,15 +280,40 @@ func appendPyJSON(dst []byte, value any, ascii bool, itemSep, kvSep string) ([]b
 			}
 			dst = append(dst, kvSep...)
 			var err error
-			dst, err = appendPyJSON(dst, pair.val, ascii, itemSep, kvSep)
+			dst, err = appendPyJSONDepth(dst, pair.val, ascii, itemSep, kvSep, depth+1)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return append(dst, '}'), nil
+	case *orderedMap:
+		// The turnstile VM's OrderedMap (window.Object.create) serializes
+		// as its insertion-ordered contents — the browser VM's
+		// JSON.stringify(map) the challenges rely on. Deliberate divergence
+		// from the oracle, whose OrderedMap class makes json.dumps raise
+		// TypeError (the reference can therefore never dump a map; real
+		// challenges dump the fingerprint map — see testdata/turnstile).
+		dst = append(dst, '{')
+		for i, key := range v.keys {
+			if i > 0 {
+				dst = append(dst, itemSep...)
+			}
+			if ascii {
+				dst = pyJSONEscapeASCII(append(dst, '"'), key)
+			} else {
+				dst = pyJSONEscape(append(dst, '"'), key)
+			}
+			dst = append(dst, kvSep...)
+			var err error
+			dst, err = appendPyJSONDepth(dst, v.values[key], ascii, itemSep, kvSep, depth+1)
 			if err != nil {
 				return nil, err
 			}
 		}
 		return append(dst, '}'), nil
 	default:
-		// The oracle's json.dumps raises TypeError here (e.g. an
-		// OrderedMap); callers treat the error as a swallowed op failure.
+		// The oracle's json.dumps raises TypeError here; callers treat the
+		// error as a swallowed op failure.
 		return nil, fmt.Errorf("value of type %T is not JSON-serializable like Python's", value)
 	}
 }

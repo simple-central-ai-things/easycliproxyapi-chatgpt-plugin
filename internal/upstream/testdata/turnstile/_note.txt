@@ -18,3 +18,20 @@ driver assertions). Opcodes covered: 1,2,3,5,6,7,8,14,15,17(all branches),
 18,19,20,21,23,24 plus data nodes 10/16. Not covered: opcodes 0,4,11,12,13,
 22 (unregistered in the oracle — unknown to it, skipped; see n02).
 No session material: all XOR keys are synthetic.
+
+r01-live-two-stage (2026-11-06) is a REAL captured challenge (dx + the
+legacy token p used as the XOR key — challenge material only, no account
+credentials; it embeds a client-computed requirements timestamp and the
+emulated browser strings). It is a self-modifying multi-stage program:
+stage 1 (89 tokens) decodes a second program into data slot 9 via op 14,
+stage 2 (505 tokens) builds the fingerprint OrderedMap and decodes stage 3
+into slot 9, stage 3 (5 tokens) dumps the map (op 15), XORs it with the
+"97.85" register (op 1) and sets the result (op 3 via op 7). The oracle
+returns None on it — its `for token in token_list` never executes the
+replacement, and its OrderedMap makes json.dumps raise TypeError — so this
+vector pins the two deliberate divergences (see turnstile.go): the VM
+restarts over a replaced program slot (expected_passes = [89, 505, 5]) and
+op 15 serializes OrderedMap contents. The token is NOT deterministic (the
+fingerprint carries performance.now/Math.random floats), so expect_result
+asserts solve success + pass chain + the token's stable plaintext head
+(expected_plain_prefix after XOR with plain_xor_key); no expected_token.

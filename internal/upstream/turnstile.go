@@ -8,18 +8,86 @@ package upstream
 // emulated browser strings, and the same error-swallowing main loop
 // (`except Exception: continue` → every internal failure skips one opcode).
 //
+// Two deliberate divergences from the oracle, both required by live
+// multi-stage challenges (pinned by the r01 fixture in
+// testdata/turnstile/vectors.json — the oracle returns None on it):
+//
+//   - Self-replacement execution: a live challenge's first stage parses a
+//     NEW program into data slot 9 (the slot the main loop executes) and
+//     expects the VM to run it; the oracle's `for token in token_list`
+//     iterates the ORIGINAL list and stops. The port re-reads slot 9 after
+//     every token and restarts from index 0 on a genuine replacement
+//     (bounded by maxTurnstilePasses).
+//
+//   - OrderedMap serialization: op 15 (json.dumps) serializes the
+//     window.Object.create map by its insertion-ordered contents (the
+//     browser VM's JSON.stringify). The oracle's OrderedMap class makes
+//     json.dumps raise TypeError, so the reference can never dump a map.
+//
 // The token the oracle emits is base64 of the literal argument to op 3;
 // the rest of the program is environment simulation that the fixtures gate
 // on through op 20 equality checks (see testdata/turnstile/_note.txt).
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
+	"sync"
 	"time"
 )
+
+// -------------------------------------------------------------------------
+// TEMPORARY DEBUG HOOK — live turnstile investigation only. Remove once the
+// real-dx bug is fixed. When the environment variable
+// CHATGPT_PROXY_DEBUG_TURNSTILE names a writable directory, every solve
+// appends one JSON capture there: dx, the XOR key p, the decoded+XOR'd
+// program source, the per-opcode execution trace and the failure code. The
+// produced token is deliberately NEVER written (challenge material only:
+// dx/p/program carry no account credentials). Unset (the default) makes the
+// hook a no-op besides one getenv.
+// -------------------------------------------------------------------------
+var turnstileDebugDir = sync.OnceValue(func() string {
+	return strings.TrimSpace(os.Getenv("CHATGPT_PROXY_DEBUG_TURNSTILE"))
+})
+
+// turnstileDebugCapture writes one solve capture when the hook is armed.
+// Best effort: every error is swallowed — debugging must never break the
+// solve path.
+func turnstileDebugCapture(dx, p, program string, trace []string, solveErr error, resultSet bool) {
+	dir := turnstileDebugDir()
+	if dir == "" {
+		return
+	}
+	errText := ""
+	if solveErr != nil {
+		errText = solveErr.Error()
+	}
+	if trace == nil {
+		trace = []string{}
+	}
+	payload, err := json.Marshal(map[string]any{
+		"time":       time.Now().UTC().Format(time.RFC3339Nano),
+		"dx":         dx,
+		"p":          p,
+		"program":    program,
+		"result_set": resultSet,
+		"error":      errText,
+		"trace":      trace,
+	})
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("turnstile-%d.json", time.Now().UnixNano())), payload, 0o600)
+}
 
 // Sentinel errors the VM reports. The oracle returns None for every
 // failure; the port surfaces the failure cause instead (the reference would
@@ -45,6 +113,12 @@ var (
 // empty p disables the XOR, like the oracle.
 func SolveTurnstile(dx, p string) (string, error) {
 	vm, err := solveTurnstileVM(dx, p)
+	// TEMPORARY DEBUG HOOK: capture dx/p/program/trace (never the token).
+	if vm != nil {
+		turnstileDebugCapture(dx, p, vm.programText, vm.trace, err, vm.result != "")
+	} else {
+		turnstileDebugCapture(dx, p, "", nil, err, false)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -72,7 +146,10 @@ func solveTurnstileVM(dx, p string) (*turnstileVM, error) {
 		// characters) and never dispatch an opcode; treat it as empty.
 		program = []any{}
 	}
+	debug := turnstileDebugDir() != ""
 	vm := &turnstileVM{
+		debug:       debug,
+		programText: text,
 		env: map[any]any{
 			1: opID(opXorAssign), 2: opID(opAssign), 3: opID(opSetResult),
 			5: opID(opConcat), 6: opID(opDottedLocation), 7: opID(opCall),
@@ -89,30 +166,72 @@ func solveTurnstileVM(dx, p string) (*turnstileVM, error) {
 	}
 	vm.rng = rand.New(rand.NewPCG(uint64(vm.startNS), 0))
 
-	for _, tok := range program {
+	// The program slot (9) is a DATA node the challenge can replace while
+	// the VM runs: a live op 14 parses a NEW bytecode program into slot 9
+	// (self-modifying, multi-stage challenge). The oracle's
+	// `for token in token_list` iterates the ORIGINAL list and therefore
+	// never executes the replacement — real challenges need it (verified
+	// against a captured live dx: stages 89 -> 505 -> 5 tokens, token set
+	// only by the last stage). Execute each replacement from its first
+	// token, bounded by maxTurnstilePasses so a pathological program
+	// cannot hang the solve.
+	code := program
+	vm.passes = append(vm.passes, len(code))
+	for i := 0; i < len(code); {
+		tok := code[i]
+		vm.tracef("token[%d] = %s", i, pyDebugRepr(tok))
 		entry, isEntry := tok.([]any)
 		if !isEntry || len(entry) == 0 {
-			continue // oracle: IndexError/TypeError on token[0] -> continue
+			vm.tracef("  skip: not a non-empty list")
+		} else if key := pyNormalizeKey(entry[0]); !keyHashable(key) {
+			vm.tracef("  skip: unhashable opcode")
+		} else if fn, exists := vm.env[key]; !exists {
+			vm.tracef("  skip: unknown opcode %s", pyDebugRepr(key))
+		} else if op, isOp := fn.(opID); !isOp {
+			vm.tracef("  skip: data node %s", pyDebugRepr(key))
+		} else {
+			vm.runOp(op, entry[1:])
 		}
-		key := pyNormalizeKey(entry[0])
-		if !keyHashable(key) {
-			continue // oracle: unhashable token[0] -> TypeError -> continue
+		i++
+		// Deliberate divergence from the oracle (see comment above): pick
+		// up a program replacement. json-parse and concat always build a
+		// fresh backing array, so backing-pointer identity separates a
+		// genuine replacement from a re-store of the running program.
+		if next, ok := vm.env[9].([]any); ok && !sameProgramBacking(next, code) {
+			if len(vm.passes) > maxTurnstilePasses {
+				break
+			}
+			vm.tracef("program replaced -> pass %d over %d tokens", len(vm.passes), len(next))
+			code = next
+			vm.passes = append(vm.passes, len(code))
+			i = 0
 		}
-		fn, exists := vm.env[key]
-		if !exists {
-			continue // unknown opcode index: the oracle skips it silently
-		}
-		op, isOp := fn.(opID)
-		if !isOp {
-			continue // data nodes (9/10/16) are not callable
-		}
-		vm.runOp(op, entry[1:])
 	}
 
 	if vm.result == "" {
-		return nil, fmt.Errorf("turnstile program produced no token: %w", ErrTurnstileUnsolvable)
+		// Return the VM alongside the error: the debug capture needs the
+		// program text and execution trace of the failed solve.
+		return vm, fmt.Errorf("turnstile program produced no token: %w", ErrTurnstileUnsolvable)
 	}
 	return vm, nil
+}
+
+// maxTurnstilePasses bounds the self-replacement chain: a program that
+// keeps replacing its own program slot cannot hang the solve. Live
+// challenges use 2 replacements (3 stages); 64 leaves a wide margin.
+const maxTurnstilePasses = 64
+
+// sameProgramBacking reports whether two program generations share one
+// backing array — a re-store of the running program (op 8/2 copying the
+// list back into slot 9) is not a replacement.
+func sameProgramBacking(a, b []any) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	if len(a) == 0 {
+		return true
+	}
+	return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()
 }
 
 // turnstileVM is one solve: the emulated page plus the VM bookkeeping.
@@ -121,10 +240,26 @@ type turnstileVM struct {
 	result  string
 	startNS int64
 	rng     *rand.Rand
+	// TEMPORARY DEBUG HOOK state (see turnstileDebugDir): trace lines and
+	// the decoded program source, populated only when the env dir is set.
+	debug       bool
+	trace       []string
+	programText string
+	// passes records the token count of every executed program generation:
+	// the initial program plus each self-replacement (multi-stage chain).
+	passes []int
 	// omapAdds records every OrderedMap.add call in program order — the
 	// differential hook the driver's monkeypatch provides on the oracle
 	// side (the oracle closure is not otherwise inspectable).
 	omapAdds [][]any
+}
+
+// tracef appends one formatted trace line when the debug hook is armed.
+func (vm *turnstileVM) tracef(format string, args ...any) {
+	if !vm.debug {
+		return
+	}
+	vm.trace = append(vm.trace, fmt.Sprintf(format, args...))
 }
 
 // opID marks a builtin opcode registered in the environment.
@@ -174,6 +309,7 @@ func (vm *turnstileVM) runOp(op opID, args []any) {
 	defer func() {
 		_ = recover()
 	}()
+	vm.tracef("  op %d args=%s", int(op), pyDebugReprSlice(args))
 	switch op {
 	case opXorAssign:
 		vm.opXorAssign(args)
@@ -227,6 +363,7 @@ func (vm *turnstileVM) set(key, value any) {
 	if !keyHashable(key) {
 		return
 	}
+	vm.tracef("    set %s = %s", pyDebugRepr(key), pyDebugRepr(value))
 	vm.env[key] = value
 }
 
@@ -621,4 +758,44 @@ func (vm *turnstileVM) opDottedJoin(args []any) {
 		return
 	}
 	vm.set(args[0], top+"."+sub)
+}
+
+// -------------------------------------------------------------------------
+// TEMPORARY DEBUG HOOK repr helpers (debug traces only — never on the wire).
+// -------------------------------------------------------------------------
+
+// pyDebugRepr renders one VM value for the debug trace: oracle-shaped
+// (pythonStr dialect) plus plugin-specific types the oracle sees as opaque
+// objects. Long strings are truncated; the repr is for humans diffing two
+// traces, not for byte-identity.
+func pyDebugRepr(value any) string {
+	const cap = 160
+	out := pyDebugReprUncapped(value)
+	if len(out) > cap {
+		out = out[:cap] + "...<truncated>"
+	}
+	return out
+}
+
+func pyDebugReprSlice(args []any) string {
+	parts := make([]string, len(args))
+	for i, arg := range args {
+		parts[i] = pyDebugRepr(arg)
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+func pyDebugReprUncapped(value any) string {
+	switch v := value.(type) {
+	case opID:
+		return fmt.Sprintf("<op%d>", int(v))
+	case *orderedMap:
+		pairs := make([]string, 0, len(v.keys))
+		for _, key := range v.keys {
+			pairs = append(pairs, pyReprString(key)+": "+pyDebugRepr(v.values[key]))
+		}
+		return "<OrderedMap{" + strings.Join(pairs, ", ") + "}>"
+	default:
+		return pythonStr(value)
+	}
 }

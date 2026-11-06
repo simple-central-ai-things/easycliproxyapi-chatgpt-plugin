@@ -275,6 +275,24 @@ func (m *Manager) refreshToken(_ context.Context, callbackID string, cred Creden
 // material); the app_session_terminated marker is lifted to the typed
 // errCredentialTerminated sentinel so the handler answers non-retryable.
 func oauthRefreshError(status int, body []byte) error {
+	detail := oauthErrorDetail(body)
+	if strings.Contains(strings.ToLower(detail), "app_session_terminated") {
+		return fmt.Errorf("%w: %s", errCredentialTerminated, detail)
+	}
+	return fmt.Errorf("oauth refresh failed with http %d: %s", status, detail)
+}
+
+// oauthTokenError turns a rejected login-exchange response into an error with
+// the same safe-detail rule as oauthRefreshError.
+func oauthTokenError(status int, body []byte) error {
+	return fmt.Errorf("oauth login exchange failed with http %d: %s", status, oauthErrorDetail(body))
+}
+
+// oauthErrorDetail extracts the provider's own detail text from a rejected
+// token response (error_description, then error, then message, then the raw
+// body, capped). Our token material never appears in the reply, so the
+// detail is safe to surface in error messages.
+func oauthErrorDetail(body []byte) string {
 	var rejected struct {
 		Error     string `json:"error"`
 		ErrorDesc string `json:"error_description"`
@@ -294,10 +312,7 @@ func oauthRefreshError(status int, body []byte) error {
 	if len(detail) > 300 {
 		detail = detail[:300]
 	}
-	if strings.Contains(strings.ToLower(detail), "app_session_terminated") {
-		return fmt.Errorf("%w: %s", errCredentialTerminated, detail)
-	}
-	return fmt.Errorf("oauth refresh failed with http %d: %s", status, detail)
+	return detail
 }
 
 func recordRefreshFailure(cred Credential, at time.Time, message string) Credential {

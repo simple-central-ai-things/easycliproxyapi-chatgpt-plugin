@@ -6,7 +6,9 @@
 // and the config surface are the contracts every later task builds on; the
 // protocol implementations land in later tasks and are dispatched from the
 // same Manager. auth.parse / auth.refresh (Task 3) claim type=chatgpt-proxy
-// credential records and run the OAuth refresh_token lifecycle.
+// credential records and run the OAuth refresh_token lifecycle;
+// auth.login.start / auth.login.poll (Task 4) run the browser OAuth PKCE
+// flow against the host's callback-file mechanism.
 package plugin
 
 import (
@@ -44,6 +46,12 @@ type Manager struct {
 
 	mu  sync.RWMutex
 	cfg Config
+
+	// loginMu guards logins, the in-memory browser-OAuth attempt store
+	// (login.go). It is separate from mu: login lifecycle never needs the
+	// config snapshot and vice versa, so the two locks stay unentangled.
+	loginMu sync.Mutex
+	logins  map[string]loginAttempt
 }
 
 // New returns a Manager whose outbound host calls flow through host. A nil
@@ -52,7 +60,7 @@ func New(host caller) (*Manager, error) {
 	if host == nil {
 		return nil, fmt.Errorf("host caller is required")
 	}
-	return &Manager{host: host}, nil
+	return &Manager{host: host, logins: make(map[string]loginAttempt)}, nil
 }
 
 // Handle dispatches one RPC method and returns envelope bytes. Handler
@@ -87,6 +95,10 @@ func (m *Manager) Handle(method string, request []byte) (resp []byte, err error)
 		return m.handleAuthParse(request)
 	case pluginabi.MethodAuthRefresh:
 		return m.handleAuthRefresh(request)
+	case pluginabi.MethodAuthLoginStart:
+		return m.handleLoginStart(request)
+	case pluginabi.MethodAuthLoginPoll:
+		return m.handleLoginPoll(request)
 	case pluginabi.MethodPluginQuiesce, pluginabi.MethodPluginShutdown:
 		return m.handleShutdown()
 	default:

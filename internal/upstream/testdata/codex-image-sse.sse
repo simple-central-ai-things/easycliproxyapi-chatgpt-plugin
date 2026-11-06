@@ -1,0 +1,14 @@
+data: {"type": "response.created", "response": {"id": "resp_fixture_1", "status": "in_progress", "output": []}}
+
+data: {"type": "response.output_item.added", "output_index": 0, "item": {"type": "message", "status": "in_progress", "content": []}}
+
+data: {"type": "response.output_item.done", "output_index": 0, "item": {"type": "message", "status": "completed", "content": [{"type": "output_text", "text": "Here is your image."}]}}
+
+data: {"type": "response.output_item.added", "output_index": 1, "item": {"type": "image_generation_call", "status": "in_progress"}}
+
+data: {"type": "response.output_item.done", "output_index": 1, "item": {"type": "image_generation_call", "status": "completed", "result": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGIAAQAABQABDQottAAAAABJRU5ErkJggg=="}}
+
+data: {"type": "response.completed", "response": {"id": "resp_fixture_1", "status": "completed", "output": [{"type": "message", "content": [{"type": "output_text", "text": "Here is your image."}]}, {"type": "image_generation_call", "status": "completed", "result": "data:image/png;base64,AAEC"}]}}
+
+data: [DONE]
+

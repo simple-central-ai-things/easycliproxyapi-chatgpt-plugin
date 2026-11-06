@@ -1,0 +1,1 @@
+{"type": "response.completed", "response": {"id": "resp_fixture_1", "status": "completed", "output": [{"type": "image_generation_call", "status": "completed", "result": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGIAAQAABQABDQottAAAAABJRU5ErkJggg=="}]}}

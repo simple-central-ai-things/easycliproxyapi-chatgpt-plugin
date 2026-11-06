@@ -1,0 +1,6 @@
+Scenario: policy moderation block (oracle "moderation" section). The
+moderation_response.blocked==true flag is recorded in state (complete event
+carries Blocked=true) and the assistant refusal prose that follows IS visible
+text — it streams as an assistant_delta and is part of the final answer
+("I can't assist with that request."). The caller decides the
+content-policy mapping; the stream never treats a blocked turn as an error.

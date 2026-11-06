@@ -1,0 +1,11 @@
+Scenario: the stream ends with NO visible assistant answer. Three assistant
+messages arrive, each violating one is_visible_assistant_message rule:
+- m-3 channel "reasoning" (not "final") -> dropped
+- m-4 recipient "web" (not "all") -> dropped
+- m-5 metadata.is_visually_hidden_from_conversation true -> dropped
+So none of their text may produce a delta: the complete event carries
+Text == "" and MessageID == "". The caller maps that to the typed
+no-assistant-content failure (Review Focus #2's empty-answer half).
+
+The input_message frame carries the user's own prompt (not assistant output)
+and the message_marker frames are display-only — none of them leak text.

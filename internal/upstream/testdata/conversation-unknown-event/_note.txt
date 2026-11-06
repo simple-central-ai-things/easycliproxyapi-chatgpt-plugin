@@ -1,0 +1,8 @@
+Scenario: Review Focus #2 (upstream SSE shape drift). An unknown event type
+("mystery_event_v9") arrives mid-turn. The parser must NOT interrupt the
+stream: the frame is surfaced as a "raw" event and the turn still completes
+with the assembled text "ok".
+
+Also exercises SSE frame filtering: a comment line (": keep-alive ...") and a
+non-data "event:" line are skipped entirely, exactly like the oracle's
+iter_sse_payloads (only "data:" lines yield payloads).

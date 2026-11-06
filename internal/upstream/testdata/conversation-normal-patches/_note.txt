@@ -1,0 +1,18 @@
+Scenario: normal assistant text turn (oracle docs/upstream-sse-conversation.md
+"message add" + "text increment" shapes).
+
+Frames, in order:
+1. "v1" protocol marker (tolerated, surfaced as raw).
+2. resume_conversation_token: establishes conversation_id c-123; the token
+   itself must never surface downstream.
+3. assistant message add (o:"add", v.message with empty parts, in_progress):
+   surfaces a message_id event, resets nothing (fresh text accumulator).
+4. append patch on /message/content/parts/0 -> "Hello" delta.
+5. bare {"v":" world"} continuation frame (path omitted; appended because the
+   accumulator is non-empty and p/o are absent).
+6. batch patch array: append "!" + status/end_turn replaces (non-text ops are
+   no-ops for the text accumulator).
+7. title_generation: auxiliary event, no text, surfaced as raw.
+8. server_ste_metadata: updates tool_invoked=false / turn_use_case="text" in
+   state, surfaced as raw.
+9. [DONE] -> complete event with assembled text "Hello world!".

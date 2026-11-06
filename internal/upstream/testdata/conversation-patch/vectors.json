@@ -1,0 +1,108 @@
+[
+  {
+    "name": "append_on_parts_zero",
+    "event": {"p": "/message/content/parts/0", "o": "append", "v": "Hello"},
+    "current": "",
+    "history": "",
+    "want": "Hello"
+  },
+  {
+    "name": "replace_strips_history_prefix",
+    "event": {"p": "/message/content/parts/0", "o": "replace", "v": "Old. New."},
+    "current": "Old. ",
+    "history": "Old. ",
+    "want": "New."
+  },
+  {
+    "name": "replace_strips_repeated_history_prefix",
+    "event": {"p": "/message/content/parts/0", "o": "replace", "v": "OldOld End"},
+    "current": "",
+    "history": "Old",
+    "want": " End"
+  },
+  {
+    "name": "add_op_on_parts_zero_is_noop",
+    "event": {"p": "/message/content/parts/0", "o": "add", "v": "x"},
+    "current": "kept",
+    "history": "",
+    "want": "kept"
+  },
+  {
+    "name": "bare_string_appends_when_accumulator_nonempty",
+    "event": {"v": " world"},
+    "current": "Hello",
+    "history": "",
+    "want": "Hello world"
+  },
+  {
+    "name": "bare_string_dropped_when_accumulator_empty",
+    "event": {"v": "Hello"},
+    "current": "",
+    "history": "",
+    "want": ""
+  },
+  {
+    "name": "bare_string_ignored_when_path_present",
+    "event": {"p": "/message/status", "v": "replace-value"},
+    "current": "Hello",
+    "history": "",
+    "want": "Hello"
+  },
+  {
+    "name": "batch_patch_array",
+    "event": {
+      "p": "",
+      "o": "patch",
+      "v": [
+        {"p": "/message/content/parts/0", "o": "append", "v": "!"},
+        {"p": "/message/status", "o": "replace", "v": "finished_successfully"},
+        {"p": "/message/end_turn", "o": "replace", "v": true}
+      ]
+    },
+    "current": "Hello world",
+    "history": "",
+    "want": "Hello world!"
+  },
+  {
+    "name": "plain_v_array_also_folded",
+    "event": {
+      "v": [
+        {"p": "/message/content/parts/0", "o": "append", "v": "again"},
+        {"v": "tail"},
+        {"not": "a patch"}
+      ]
+    },
+    "current": "a",
+    "history": "",
+    "want": "aagaintail"
+  },
+  {
+    "name": "replace_without_history",
+    "event": {"p": "/message/content/parts/0", "o": "replace", "v": "full text"},
+    "current": "partial",
+    "history": "",
+    "want": "full text"
+  },
+  {
+    "name": "full_message_add_returns_message_text",
+    "event": {
+      "p": "",
+      "o": "add",
+      "v": {"message": {"author": {"role": "assistant"}, "content": {"content_type": "text", "parts": ["Whole"]}}}
+    },
+    "current": "prev",
+    "history": "",
+    "want": "Whole"
+  },
+  {
+    "name": "hidden_message_add_falls_back_to_patch",
+    "event": {
+      "p": "",
+      "o": "add",
+      "v": {"message": {"author": {"role": "assistant"}, "metadata": {"is_visually_hidden_from_conversation": true}, "content": {"content_type": "text", "parts": ["hidden"]}}}
+    },
+    "current": "kept",
+    "history": "",
+    "want": "kept"
+  }
+]

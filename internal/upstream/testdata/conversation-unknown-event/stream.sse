@@ -1,0 +1,16 @@
+data: v1
+
+data: {"type":"resume_conversation_token","token":"t","conversation_id":"c-777"}
+
+data: {"type":"mystery_event_v9","payload":{"n":1},"conversation_id":"c-777"}
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-9","author":{"role":"assistant"},"content":{"content_type":"text","parts":[""]}},"conversation_id":"c-777"}}
+
+data: {"p":"/message/content/parts/0","o":"append","v":"ok"}
+
+: keep-alive comment line
+
+event: some-frame-event-name
+
+data: [DONE]
+

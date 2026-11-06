@@ -1,0 +1,13 @@
+Golden for BuildConversationPayload output serialization (marshalConversationPayload).
+
+Generated from the reference's own json.dumps default dialect (ensure_ascii=True,
+", " / ": " separators — the exact bytes requests json=payload posts), with the
+uuid4 seam pinned to the 00000000-0000-4000-0000-00000000000N sequence in oracle
+call order: message id x2, parent_message_id, websocket_request_id.
+
+Request under test: two messages (system "You are terse." / user "Hello, 世界" —
+the non-ASCII content exercises ensure_ascii escaping), model "gpt-5",
+thinking_effort "high" (present as a key), timezone default "Asia/Shanghai".
+
+Key order is the oracle's _conversation_payload insertion order; thinking_effort
+is last because the oracle appends it after the fixed block.

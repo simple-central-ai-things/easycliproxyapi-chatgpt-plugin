@@ -1,0 +1,7 @@
+Scenario: multi-turn history replay (oracle iter_conversation_payloads
+history skip). The request history (WithRequestMessages) contains one prior
+assistant message "Earlier answer."; the stream re-sends it as a full message
+add before the new turn. The replayed add must produce NO delta — it is
+matched against the expected history and clears the text accumulator — while
+the fresh message (m-2) + append stream "New answer". Final text is exactly
+"New answer", never "Earlier answer.New answer".

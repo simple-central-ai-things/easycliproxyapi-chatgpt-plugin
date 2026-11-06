@@ -1,0 +1,18 @@
+data: v1
+
+data: {"type":"resume_conversation_token","token":"t","conversation_id":"c-999"}
+
+data: {"type":"input_message","input_message":{"author":{"role":"user"},"content":{"content_type":"text","parts":["draw me"]}},"conversation_id":"c-999"}
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-3","author":{"role":"assistant"},"channel":"reasoning","content":{"content_type":"text","parts":["secret chain of thought"]}},"conversation_id":"c-999"}}
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-4","author":{"role":"assistant"},"recipient":"web","content":{"content_type":"text","parts":["<tool command>"]}},"conversation_id":"c-999"}}
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-5","author":{"role":"assistant"},"metadata":{"is_visually_hidden_from_conversation":true},"content":{"content_type":"text","parts":["hidden preamble"]}},"conversation_id":"c-999"}}
+
+data: {"type":"message_marker","marker":"user_visible_token","event":"first"}
+
+data: {"type":"message_marker","marker":"last_token","event":"last"}
+
+data: [DONE]
+

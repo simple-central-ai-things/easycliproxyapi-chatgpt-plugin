@@ -1,0 +1,14 @@
+data: v1
+
+data: {"type":"resume_conversation_token","token":"t","conversation_id":"c-888"}
+
+data: {"type":"moderation","moderation_response":{"blocked":true},"conversation_id":"c-888"}
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-2","author":{"role":"assistant"},"content":{"content_type":"text","parts":[""]}},"conversation_id":"c-888"}}
+
+data: {"p":"/message/content/parts/0","o":"append","v":"I can't assist with that request."}
+
+data: {"type":"title_generation","title":"Request Denied","conversation_id":"c-888"}
+
+data: [DONE]
+

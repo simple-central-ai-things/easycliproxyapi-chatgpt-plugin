@@ -1,0 +1,18 @@
+data: v1
+
+data: {"type":"resume_conversation_token","kind":"topic","token":"resume-token-do-not-leak","conversation_id":"c-123"}
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-1","author":{"role":"assistant"},"content":{"content_type":"text","parts":[""]},"status":"in_progress"},"conversation_id":"c-123"},"c":3}
+
+data: {"p":"/message/content/parts/0","o":"append","v":"Hello"}
+
+data: {"v":" world"}
+
+data: {"p":"","o":"patch","v":[{"p":"/message/content/parts/0","o":"append","v":"!"},{"p":"/message/status","o":"replace","v":"finished_successfully"},{"p":"/message/end_turn","o":"replace","v":true}]}
+
+data: {"type":"title_generation","title":"Say hello","conversation_id":"c-123"}
+
+data: {"type":"server_ste_metadata","metadata":{"tool_invoked":false,"turn_use_case":"text","model_slug":"gpt-5"},"conversation_id":"c-123"}
+
+data: [DONE]
+

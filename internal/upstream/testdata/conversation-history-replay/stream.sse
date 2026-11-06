@@ -1,0 +1,12 @@
+data: v1
+
+data: {"type":"resume_conversation_token","token":"t","conversation_id":"c-555"}
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-h","author":{"role":"assistant"},"content":{"content_type":"text","parts":["Earlier answer."]}},"conversation_id":"c-555"}}
+
+data: {"p":"","o":"add","v":{"message":{"id":"m-2","author":{"role":"assistant"},"content":{"content_type":"text","parts":[""]}},"conversation_id":"c-555"}}
+
+data: {"p":"/message/content/parts/0","o":"append","v":"New answer"}
+
+data: [DONE]
+

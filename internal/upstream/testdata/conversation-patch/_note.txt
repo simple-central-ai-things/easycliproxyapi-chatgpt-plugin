@@ -1,0 +1,14 @@
+Differential vectors for assistantRawText / applyTextPatch (oracle
+conversation.py apply_text_patch + apply_patch_op + assistant_message_text).
+
+Each entry feeds (event, current_text, history_text) and pins the resulting
+text. Covers the oracle's quirks a naive port would miss:
+- bare {"v":"str"} frames only append when the accumulator is non-empty AND
+  the frame carries neither p nor o (an empty-string p/o counts as absent,
+  Python falsy semantics)
+- replace strips a leading history-text prefix (strip_history loop)
+- add/op on /message/content/parts/0 is a text no-op
+- o:"patch" and plain v-array frames fold item by item in order
+- a full visible assistant message add returns the message's own text
+  (replacing the accumulator), while a hidden one falls through to patch
+  semantics and keeps the accumulator.

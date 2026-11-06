@@ -42,6 +42,10 @@ const (
 
 	execUpstreamStreamID = "up-1"
 	execDownstreamID     = "down-1"
+
+	// execAuthFile is the host-selected AuthID (the pool identifier IS the
+	// auth file name) — a realistic chatgpt-proxy record name.
+	execAuthFile = "chatgpt-proxy-0123456789abcdef.json"
 )
 
 // execBootstrapHTML is the sentinel bootstrap body: one script src and a
@@ -106,6 +110,12 @@ type execStreamClose struct {
 	errMsg   string
 }
 
+// execAuthSave is one recorded host.auth.save callback.
+type execAuthSave struct {
+	name string
+	json []byte
+}
+
 // execFakeCaller is the offline host seam for executor tests. host.http.do
 // scripts are keyed by "url\x00authorization" so two credentials (or two
 // tokens) hitting the same route carry independent responses; the single
@@ -129,6 +139,12 @@ type execFakeCaller struct {
 
 	emits  []execStreamEmit
 	closes []execStreamClose
+
+	// saveFail, when set, makes host.auth.save answer a failure envelope —
+	// the executor must then treat the refresh as failed (typed 401, no
+	// retry with an unpersisted credential).
+	saveFail bool
+	saves    []execAuthSave
 }
 
 func newExecFakeCaller() *execFakeCaller {
@@ -316,6 +332,21 @@ func (f *execFakeCaller) Call(method string, request []byte) ([]byte, error) {
 		f.mu.Unlock()
 		return hostOK(map[string]any{}), nil
 
+	case pluginabi.MethodHostAuthSave:
+		// SDK HostAuthSaveRequest wire shape: {"name","json"}.
+		var req pluginapi.HostAuthSaveRequest
+		_ = json.Unmarshal(request, &req)
+		f.mu.Lock()
+		fail := f.saveFail
+		if !fail {
+			f.saves = append(f.saves, execAuthSave{name: req.Name, json: append([]byte(nil), req.JSON...)})
+		}
+		f.mu.Unlock()
+		if fail {
+			return hostErr("auth_save_rejected"), nil
+		}
+		return hostOK(pluginapi.HostAuthSaveResponse{Name: req.Name}), nil
+
 	default:
 		return hostOK(map[string]any{}), nil
 	}
@@ -395,7 +426,7 @@ func execRequest(t *testing.T, cred Credential, model string, payload any, strea
 		t.Fatalf("marshal chat payload: %v", err)
 	}
 	return pluginapi.ExecutorRequest{
-		AuthID:       "auth-1",
+		AuthID:       execAuthFile,
 		AuthProvider: providerKey,
 		Model:        model,
 		Format:       "openai",
@@ -906,6 +937,111 @@ func Test401RefreshRetryOnce(t *testing.T) {
 		}
 		if wire.Headers.Get("Authorization") != fresh {
 			t.Fatalf("retry Authorization = %q, want the refreshed bearer", wire.Headers.Get("Authorization"))
+		}
+	})
+
+	t.Run("forced refresh persists the rotated credential before the retry", func(t *testing.T) {
+		cred := execCredential()
+		old := "Bearer " + cred.AccessToken
+		fresh := "Bearer fresh-access-token"
+		fake := newExecFakeCaller()
+		for key, resp := range happySentinelScripts(fresh) {
+			fake.doScripts[key] = resp
+		}
+		fake.doScripts[fake.scriptKey(execPrepareURL, old)] = hostHTTPResponse{StatusCode: http.StatusUnauthorized}
+		fake.doScripts[fake.scriptKey(execPlanCheckURL, fresh)] = hostHTTPResponse{
+			StatusCode: http.StatusOK,
+			Body:       []byte(`{"accounts":{"default":{"account":{"plan_type":"plus"}}}}`),
+		}
+		// The refresh ROTATES the refresh token (the old one is invalid
+		// after this); only the persisted record may carry the new triple.
+		fake.doScripts[fake.scriptKey(execOAuthTokenURL, "")] = hostHTTPResponse{
+			StatusCode: http.StatusOK,
+			Body:       []byte(`{"access_token":"fresh-access-token","refresh_token":"rotated-refresh-token","id_token":"fresh-id-token"}`),
+		}
+		fake.setChunks(chunkedSSE(execHappySSE, 7))
+		m := execManager(t, fake, "")
+
+		resp, err := m.Handle(pluginabi.MethodExecutorExecute, execRequestBody(t,
+			execRequest(t, cred, "chatgpt-proxy/openai/gpt-5", chat(), false), ""))
+		if err != nil {
+			t.Fatalf("Handle(executor.execute): %v", err)
+		}
+		decodeExecResult(t, resp) // the retried turn completes
+
+		// host.auth.save issued exactly once, under the record's file name,
+		// carrying the ROTATED triple.
+		fake.mu.Lock()
+		saves := append([]execAuthSave(nil), fake.saves...)
+		fake.mu.Unlock()
+		if len(saves) != 1 {
+			t.Fatalf("host.auth.save issued %d times, want exactly one", len(saves))
+		}
+		if saves[0].name != execAuthFile {
+			t.Fatalf("save name = %q, want the record's auth file name %q", saves[0].name, execAuthFile)
+		}
+		saved, err := FromStorageJSON(saves[0].json)
+		if err != nil {
+			t.Fatalf("saved record is not a valid credential: %v", err)
+		}
+		if saved.AccessToken != "fresh-access-token" || saved.RefreshToken != "rotated-refresh-token" || saved.IDToken != "fresh-id-token" {
+			t.Fatalf("saved triple = {access=%q refresh=%q id=%q}, want the rotated set",
+				saved.AccessToken, saved.RefreshToken, saved.IDToken)
+		}
+
+		// The save happened BEFORE the retry (the retry carried the fresh
+		// bearer; ordering pinned by the call log).
+		fake.mu.Lock()
+		saveIdx, startIdx := -1, -1
+		for i, record := range fake.calls {
+			switch record.method {
+			case pluginabi.MethodHostAuthSave:
+				saveIdx = i
+			case pluginabi.MethodHostHTTPDoStream:
+				startIdx = i
+			}
+		}
+		fake.mu.Unlock()
+		if saveIdx < 0 || startIdx < 0 || saveIdx > startIdx {
+			t.Fatalf("save/conversation-start order wrong: save=%d start=%d, want save first", saveIdx, startIdx)
+		}
+	})
+
+	t.Run("save failure aborts with typed 401 and no retry", func(t *testing.T) {
+		cred := execCredential()
+		old := "Bearer " + cred.AccessToken
+		fake := newExecFakeCaller()
+		fake.saveFail = true
+		fake.doScripts = map[string]hostHTTPResponse{
+			execBootstrapURL + "\x00":           {StatusCode: http.StatusOK, Body: execBootstrapHTML},
+			fake.scriptKey(execPrepareURL, old): {StatusCode: http.StatusUnauthorized},
+			fake.scriptKey(execOAuthTokenURL, ""): {
+				StatusCode: http.StatusOK,
+				Body:       []byte(`{"access_token":"fresh-access-token","refresh_token":"rotated-refresh-token"}`),
+			},
+		}
+		// A scripted retry path that must NOT be reached: the conversation
+		// start is never issued when the persist fails.
+		for key, resp := range happySentinelScripts("Bearer fresh-access-token") {
+			fake.doScripts[key] = resp
+		}
+		fake.setChunks(chunkedSSE(execHappySSE, 7))
+		m := execManager(t, fake, "")
+
+		resp, err := m.Handle(pluginabi.MethodExecutorExecute, execRequestBody(t,
+			execRequest(t, cred, "chatgpt-proxy/openai/gpt-5", chat(), false), ""))
+		if err != nil {
+			t.Fatalf("Handle(executor.execute): %v", err)
+		}
+		got := decodeExecError(t, resp)
+		if got.Code != "invalid_token" || got.HTTPStatus != http.StatusUnauthorized {
+			t.Fatalf("error = %+v, want typed 401 invalid_token when the save fails", got)
+		}
+		fake.mu.Lock()
+		starts := fake.streamStarts
+		fake.mu.Unlock()
+		if starts != 0 {
+			t.Fatalf("the conversation stream started %d times, want zero after a failed persist", starts)
 		}
 	})
 

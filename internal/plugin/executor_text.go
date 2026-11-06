@@ -43,6 +43,9 @@ type textTurn struct {
 	turnID       string // one chatcmpl-<uuid> per turn (all frames share it)
 	promptTokens int    // documented estimate over the request messages
 	text         string // assembled assistant text (pump only)
+	// authFileName is the record's auth file name (host-selected AuthID or
+	// the source path base) a forced refresh persists under.
+	authFileName string
 }
 
 // prepareTextTurn decodes the credential, resolves the model, shapes the
@@ -69,11 +72,12 @@ func (m *Manager) prepareTextTurn(req executorRequest) (*textTurn, *pluginabi.Er
 	}
 
 	turn := &textTurn{
-		cfg:     cfg,
-		cred:    cred,
-		modelID: req.Model,
-		turnID:  turnID(),
-		hardCap: sseHardCapFor(cfg),
+		cfg:          cfg,
+		cred:         cred,
+		modelID:      req.Model,
+		turnID:       turnID(),
+		hardCap:      sseHardCapFor(cfg),
+		authFileName: execAuthFileName(req),
 	}
 
 	// Request shaping from the host-passed OpenAI chat payload

@@ -84,8 +84,11 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   tools_unsupported` before any upstream call. `thinking_effort` /
   `reasoning_effort` map per the upstream table (none/auto omitted,
   low/medium/high as-is, xhigh/extended → `extended`). A `401` on the turn
-  start forces the internal token refresh, then exactly one retry; a failed
-  refresh or a second `401` ends in typed `401 invalid_token`. Error classes:
+  start forces the internal token refresh; the rotated record is persisted
+  back to the auth file via `host.auth.save` BEFORE the single retry (an
+  OpenAI refresh rotates the refresh token, so an unpersisted refresh would
+  break the host's next scheduled `auth.refresh`); a failed refresh, a failed
+  save, or a second `401` ends in typed `401 invalid_token`. Error classes:
   `invalid_token` 401, `upstream_stream_timeout` 504 (the turn may continue
   upstream), `content_policy_violation` 400, `rate_limited` 429 retryable
   (carrying `Retry-After`), `no_available_model` 404, `tools_unsupported`

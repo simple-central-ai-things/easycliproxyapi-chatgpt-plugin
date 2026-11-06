@@ -10,12 +10,13 @@ package plugin
 // The 401 contract: when the turn START (sentinel handshake or the
 // conversation stream start) fails with a typed invalid_token, the executor
 // forces the internal refresh (auth.go refreshToken — the same function
-// behind auth.refresh) and retries the start exactly once. A failed
-// refresh or a second 401 ends in typed 401 invalid_token with no further
-// refresh. The refreshed record is NOT persisted by the executor: the
-// executor response carries no auth_update surface, and the host's own
-// refresh lifecycle (NextRefreshAfter deadlines, fileName stability pinned
-// by Task 3) owns persistence.
+// behind auth.refresh), PERSISTS the rotated record via host.auth.save,
+// and retries the start exactly once. A failed refresh, a failed persist or
+// a second 401 ends in typed 401 invalid_token with no further refresh.
+// The persist is mandatory, not best-effort: an OpenAI refresh rotates the
+// refresh token, and the executor response carries no auth surface, so
+// skipping the save would leave the pre-rotation (invalid) token in the
+// auth file and break the host's next scheduled auth.refresh.
 //
 // Classification rule (controller ruling): errors are classified from the
 // upstream HTTP status and the typed errors upstream already produces
@@ -29,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -137,7 +139,17 @@ func turnBudget(cfg Config) time.Duration {
 
 // runTextTurnStart runs the turn start (sentinel handshake + conversation
 // SSE start) with the 401 refresh-retry loop: at most two attempts, the
-// second only after a forced refresh succeeded.
+// second only after a forced refresh succeeded AND was persisted.
+//
+// Persistence matters because an OpenAI refresh ROTATES the refresh token:
+// refreshToken overwrites the record's RefreshToken when the endpoint
+// returns a new one. The executor response carries no auth surface
+// (Payload/Headers/Metadata only), so without an explicit host.auth.save
+// the auth file would keep the pre-rotation (now invalid) refresh token,
+// the host would never advance NextRefreshAfter, and its next scheduled
+// auth.refresh would fail with invalid_grant until re-login. A failed
+// save is treated as a failed refresh: retrying with an unpersisted
+// credential would lose the rotation either way.
 func (m *Manager) runTextTurnStart(ctx context.Context, turn *textTurn, callbackID string) (<-chan upstream.ConvEvent, *pluginabi.Error) {
 	var startErr error
 	for attempt := 0; attempt < 2; attempt++ {
@@ -154,12 +166,65 @@ func (m *Manager) runTextTurnStart(ctx context.Context, turn *textTurn, callback
 				return nil, typedErr("invalid_token",
 					"the upstream rejected the bearer token and the forced refresh failed", 401)
 			}
+			// Persist the rotated record BEFORE the retry so the host's
+			// pool holds the new refresh token even if this RPC dies now.
+			if saveErr := m.saveCredential(turn.authFileName, refreshed); saveErr != nil {
+				return nil, typedErr("invalid_token",
+					"the forced refresh succeeded but the rotated credential could not be saved", 401)
+			}
 			turn.cred = refreshed
 			continue
 		}
 		return nil, mapUpstreamError(err)
 	}
 	return nil, mapUpstreamError(startErr)
+}
+
+// execAuthFileName resolves the auth file name a refreshed record must be
+// saved under: the host-selected AuthID (the pool identifier IS the file
+// name — auth.go refreshFileName precedent), falling back to the source
+// path's base when the identifier is empty. Empty means the record's name
+// is unknown to us and the refresh cannot be persisted.
+func execAuthFileName(req executorRequest) string {
+	if strings.TrimSpace(req.AuthID) != "" {
+		return req.AuthID
+	}
+	if sourcePath := req.AuthAttributes["path"]; sourcePath != "" {
+		return path.Base(sourcePath)
+	}
+	return ""
+}
+
+// saveCredential persists one refreshed record back to its auth file via
+// the host.auth.save callback (SDK wire shape {"name","json"}; the host
+// validates the .json suffix and the JSON itself). The request carries
+// token material — the one ABI crossing that is allowed, into the host's
+// own credential store. Failures are reported without echoing payload
+// material.
+func (m *Manager) saveCredential(name string, cred Credential) error {
+	if name == "" {
+		return errors.New("the auth file name is unknown; the refreshed credential cannot be saved")
+	}
+	raw, _ := json.Marshal(pluginapi.HostAuthSaveRequest{
+		Name: name,
+		JSON: cred.StorageJSON(),
+	})
+	resp, err := m.host.Call(pluginabi.MethodHostAuthSave, raw)
+	if err != nil {
+		return errors.New("host auth save transport failed")
+	}
+	var env pluginabi.Envelope
+	if err := json.Unmarshal(resp, &env); err != nil {
+		return errors.New("host auth save response is not a valid envelope")
+	}
+	if !env.OK {
+		code := ""
+		if env.Error != nil {
+			code = env.Error.Code
+		}
+		return fmt.Errorf("host auth save was rejected (code %q)", code)
+	}
+	return nil
 }
 
 // attemptTextTurnStart runs one sentinel handshake + conversation SSE start

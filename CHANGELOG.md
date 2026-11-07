@@ -4,6 +4,15 @@ This file records user-facing release summaries.
 
 ## Unreleased
 
+- Added: OpenAI function tools are now emulated on the text executor
+  instead of refused. A well-formed `tools` array is rendered into the
+  conversation as an XML tool prompt; the reply is parsed back into OpenAI
+  `tool_calls` (`finish_reason:"tool_calls"`, fresh `call_<uuid>` ids,
+  JSON-string arguments, markup-stripped content), `role:"tool"` results
+  and prior assistant `tool_calls` round-trip into the conversation, and
+  streaming with tools is buffered (role + finish frames + `[DONE]`, not
+  token-streamed). Typed `400 tools_unsupported` is kept only for tools
+  arrays where no tool carries a usable function name.
 - Fixed: the first real text turn on accounts that receive a turnstile
   challenge failed with `turnstile_unsolved` (HTTP 502). The live
   challenges are self-modifying multi-stage programs — stage 1 parses a

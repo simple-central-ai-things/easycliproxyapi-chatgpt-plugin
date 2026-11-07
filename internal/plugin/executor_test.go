@@ -783,11 +783,13 @@ func TestZeroContentIs502(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TestToolsRefused — any non-empty tools array is refused with typed 400
-// tools_unsupported BEFORE any upstream call.
+// TestToolsRefusedWithoutName — a tools array where no tool carries a usable
+// function name (e.g. a built-in web-search tool) is refused with typed 400
+// tools_unsupported BEFORE any upstream call. Well-formed function tools are
+// emulated — see executor_tools_test.go.
 // ---------------------------------------------------------------------------
 
-func TestToolsRefused(t *testing.T) {
+func TestToolsRefusedWithoutName(t *testing.T) {
 	cred := execCredential()
 	fake := newExecFakeCaller()
 	m := execManager(t, fake, "")
@@ -796,7 +798,7 @@ func TestToolsRefused(t *testing.T) {
 		execRequest(t, cred, "chatgpt-proxy/openai/gpt-5", map[string]any{
 			"messages": []any{map[string]any{"role": "user", "content": "hello"}},
 			"tools": []any{
-				map[string]any{"type": "function", "function": map[string]any{"name": "get_weather"}},
+				map[string]any{"type": "function"},
 			},
 		}, false), ""))
 	if err != nil {
@@ -806,18 +808,7 @@ func TestToolsRefused(t *testing.T) {
 	if got.Code != "tools_unsupported" || got.HTTPStatus != http.StatusBadRequest {
 		t.Fatalf("error = %+v, want typed 400 tools_unsupported", got)
 	}
-
-	fake.mu.Lock()
-	upstreamCalls := 0
-	for _, record := range fake.calls {
-		if record.method == pluginabi.MethodHostHTTPDo || record.method == pluginabi.MethodHostHTTPDoStream {
-			upstreamCalls++
-		}
-	}
-	fake.mu.Unlock()
-	if upstreamCalls != 0 {
-		t.Fatalf("the tools refusal made %d upstream calls, want zero (refuse before any network)", upstreamCalls)
-	}
+	assertZeroUpstreamCalls(t, fake)
 }
 
 // ---------------------------------------------------------------------------

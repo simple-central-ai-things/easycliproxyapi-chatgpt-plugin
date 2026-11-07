@@ -172,8 +172,18 @@ the code.
   `executor.execute` / `executor.execute_stream` in the `openai` format.
   Model resolution strips the `chatgpt-proxy/openai/` prefix to the
   upstream slug; anything else (the image models, a foreign id) is refused
-  with typed `400 model_unknown`. Any non-empty `tools` array is refused
-  with typed `400 tools_unsupported` before any upstream call.
+  with typed `400 model_unknown`. A `tools` array of OpenAI function tools
+  is EMULATED (the upstream conversation API has no tool surface): the
+  per-tool schemas plus the fixed "Tool use rules:" block are merged into
+  the conversation's system message(s), the reply's tool-call XML is parsed
+  back into OpenAI `tool_calls` (fresh `call_<uuid>` ids, JSON-string
+  arguments, `finish_reason:"tool_calls"`, markup-stripped `content`), and
+  `role:"tool"` results plus prior assistant `tool_calls` round-trip into
+  the conversation. Streaming WITH tools is buffered, not token-streamed:
+  the whole upstream turn is drained, then emitted as a role frame, a
+  finish frame carrying any `tool_calls`, and `[DONE]`. A tools array where
+  no tool carries a usable function name (e.g. built-in web-search tools)
+  is refused with typed `400 tools_unsupported` before any upstream call.
   `thinking_effort` / `reasoning_effort` map per the upstream table (none
   / auto omitted, low/medium/high as-is, xhigh/extended to
   `extended`). A `401` on the turn start forces the internal token

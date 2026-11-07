@@ -69,8 +69,14 @@ internal/plugin/
                               refresh-retry loop, upstream error -> envelope
                               mapping
   executor_text.go            the openai-format conversation turn
-                              (resolution, tools refusal, effort mapping,
-                              usage estimate, chat.completion frames)
+                              (resolution, function-tools emulation via
+                              tools.go with the nameless-tools refusal,
+                              effort mapping, usage estimate,
+                              chat.completion frames)
+  tools.go                    the OpenAI function-tools emulation: XML tool
+                              prompt + reply parsing (ported from the MIT
+                              reference's proven pattern), the agent-loop
+                              folds and the buffered tool stream
   executor_image.go           the openai-image turn (route by base name,
                               generations/edits payload, inline b64_json)
   matrix_test.go              pins the README contract matrices to the

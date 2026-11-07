@@ -113,6 +113,15 @@ func (m *Manager) handleExecutorExecuteStream(request []byte) ([]byte, error) {
 		return errEnvelope(err), nil
 	}
 
+	if turn.toolMode {
+		// Tools + streaming: buffer the whole turn and emit the answer in
+		// one shot (controller ruling #3, documented tradeoff — tool
+		// requests are not token-streamed). The buffered drain runs to
+		// completion inside Handle, like executor.execute, so no pump
+		// goroutine is spawned.
+		m.emitBufferedToolStream(req.StreamID, ch, turn, cancel)
+		return ok(map[string]any{}), nil
+	}
 	// The pump outlives Handle: it is bounded by the SSE hard cap (the
 	// watchdog inside runConversationStream) and ends when the event
 	// channel closes, so it must not inherit a short-lived context.

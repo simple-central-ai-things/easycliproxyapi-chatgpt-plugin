@@ -1,7 +1,8 @@
 package plugin
 
 // executor_text.go implements the OpenAI text conversation format: the
-// request shaping (model resolution, tools refusal, thinking-effort
+// request shaping (model resolution, OpenAI function-tools emulation —
+// see tools.go — with the nameless-tools refusal kept, thinking-effort
 // mapping), the non-stream chat.completion assembly (including the
 // zero-content → typed 502 contract, Review Focus #2) and the stream pump
 // (ConvEvent → chat.completion.chunk frames over host.stream.emit, with
@@ -46,6 +47,10 @@ type textTurn struct {
 	// authFileName is the record's auth file name (host-selected AuthID or
 	// the source path base) a forced refresh persists under.
 	authFileName string
+	// toolMode is true when the request carried an emulatable tools array:
+	// the reply text is parsed for the reference's tool-call XML and the
+	// stream is buffered (tool requests are not token-streamed).
+	toolMode bool
 }
 
 // prepareTextTurn decodes the credential, resolves the model, shapes the
@@ -86,11 +91,12 @@ func (m *Manager) prepareTextTurn(req executorRequest) (*textTurn, *pluginabi.Er
 	if len(body) == 0 {
 		body = req.OriginalRequest
 	}
-	messages, effort, shapeErr := shapeChatRequest(body)
+	messages, effort, toolMode, shapeErr := shapeChatRequest(body)
 	if shapeErr != nil {
 		return nil, shapeErr
 	}
 	turn.messages = messages
+	turn.toolMode = toolMode
 	if effort == "" {
 		// The config default applies when the request carries no
 		// thinking_effort / reasoning_effort (auto → omitted upstream).
@@ -130,55 +136,88 @@ func hasAccessToken(cred Credential) bool {
 
 // shapeChatPayload mirrors the OpenAI chat request fields this executor
 // consumes. tools is a RawMessage so a present-but-null value reads as
-// absent; both effort spellings are accepted (controller ruling).
+// absent; both effort spellings are accepted (controller ruling). A message
+// carries the tool surfaces the agent loop replays: a role:"tool" result's
+// tool_call_id and an assistant message's tool_calls.
 type shapeChatPayload struct {
 	Messages []struct {
-		Role    string `json:"role"`
-		Content any    `json:"content"`
+		Role       string                   `json:"role"`
+		Content    any                      `json:"content"`
+		ToolCallID string                   `json:"tool_call_id"`
+		ToolCalls  []shapeAssistantToolCall `json:"tool_calls"`
 	} `json:"messages"`
 	Tools           json.RawMessage `json:"tools"`
 	ThinkingEffort  string          `json:"thinking_effort"`
 	ReasoningEffort string          `json:"reasoning_effort"`
 }
 
-// shapeChatRequest turns the host-passed OpenAI chat JSON into the
-// upstream conversation messages plus the resolved thinking effort.
-// tools → typed 400 tools_unsupported BEFORE any upstream call (honest
-// refusal; SCPM routes tool-calling clients elsewhere).
-func shapeChatRequest(body []byte) ([]upstream.ConversationMessage, string, *pluginabi.Error) {
+// shapeChatRequest turns the host-passed OpenAI chat JSON into the upstream
+// conversation messages, the resolved thinking effort and the tool mode.
+//
+// tools: a non-empty array of OpenAI function tools is emulated (tools.go) —
+// the tool prompt is merged into the conversation's system message(s) and
+// the reply's tool-call XML is parsed back into OpenAI tool_calls by the
+// turn. A tools array where no tool carries a usable function name keeps
+// the honest typed 400 tools_unsupported refusal BEFORE any upstream call.
+//
+// Agent-loop round-trip: a role:"tool" result folds in as user text the way
+// the reference formats a tool_result block ("Tool result {id}:
+// {content}"); a prior assistant tool_calls message folds back into the
+// reference's tool_use XML text blocks so the upstream sees the calls it
+// (we) already made.
+func shapeChatRequest(body []byte) ([]upstream.ConversationMessage, string, bool, *pluginabi.Error) {
 	if len(body) == 0 {
-		return nil, "", typedErr("invalid_request", "empty chat payload", 400)
+		return nil, "", false, typedErr("invalid_request", "empty chat payload", 400)
 	}
 	var payload shapeChatPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, "", typedErr("invalid_request", "the chat payload is not valid JSON", 400)
+		return nil, "", false, typedErr("invalid_request", "the chat payload is not valid JSON", 400)
 	}
 
-	// The tools refusal is unconditional and precedes every other work.
-	var tools []any
-	if len(payload.Tools) > 0 && json.Unmarshal(payload.Tools, &tools) == nil && len(tools) > 0 {
-		return nil, "", typedErr("tools_unsupported",
-			"this provider does not support tools; send the request without them", 400)
+	// The tools refusal (no usable name / non-array) precedes every other
+	// work and costs zero network.
+	prompt, toolMode, err := shapeTools(payload.Tools)
+	if err != nil {
+		return nil, "", false, err
 	}
 
 	if len(payload.Messages) == 0 {
-		return nil, "", typedErr("invalid_request", "the chat payload needs at least one message", 400)
+		return nil, "", false, typedErr("invalid_request", "the chat payload needs at least one message", 400)
 	}
 
 	messages := make([]upstream.ConversationMessage, 0, len(payload.Messages))
 	for _, item := range payload.Messages {
 		content, err := messageText(item.Content)
 		if err != nil {
-			return nil, "", err
+			return nil, "", false, err
 		}
-		messages = append(messages, upstream.ConversationMessage{Role: item.Role, Content: content})
+		switch item.Role {
+		case "tool":
+			// The reference's tool_result text block; the upstream has no
+			// tool author role, so the result folds into a user message.
+			messages = append(messages, upstream.ConversationMessage{
+				Role:    "user",
+				Content: "Tool result " + item.ToolCallID + ": " + content,
+			})
+		case "assistant":
+			if len(item.ToolCalls) > 0 {
+				content = foldAssistantToolCalls(content, item.ToolCalls)
+			}
+			messages = append(messages, upstream.ConversationMessage{Role: "assistant", Content: content})
+		default:
+			messages = append(messages, upstream.ConversationMessage{Role: item.Role, Content: content})
+		}
 	}
+
+	// The tool prompt joins the conversation's system message(s) (the
+	// reference's merge_system).
+	messages = mergeSystemPrompt(messages, prompt)
 
 	effort := payload.ThinkingEffort
 	if effort == "" {
 		effort = payload.ReasoningEffort
 	}
-	return messages, effort, nil
+	return messages, effort, toolMode, nil
 }
 
 // messageText resolves one OpenAI message content: a plain string passes
@@ -236,23 +275,36 @@ func estimatePromptTokens(messages []upstream.ConversationMessage) int {
 // A channel that closes without a terminal event (the turn budget expired
 // mid-drain) maps to the typed 504: the turn may still be running upstream.
 func assembleTextCompletion(events <-chan upstream.ConvEvent, turn *textTurn) ([]byte, *pluginabi.Error) {
+	text, err := drainTextCompletion(events, turn)
+	if err != nil {
+		return nil, err
+	}
+	return completionPayload(turn, text), nil
+}
+
+// drainTextCompletion consumes the event channel to a terminal state and
+// returns the assembled raw assistant text (markup included) or a typed
+// error. Both the non-stream assembly and the buffered tool stream reuse it
+// (controller ruling #3). Zero content is the typed 502; a closed channel
+// with no terminal event is the typed 504.
+func drainTextCompletion(events <-chan upstream.ConvEvent, turn *textTurn) (string, *pluginabi.Error) {
 	for ev := range events {
 		switch ev.Kind {
 		case upstream.ConvEventError:
-			return nil, mapUpstreamError(ev.Err)
+			return "", mapUpstreamError(ev.Err)
 		case upstream.ConvEventComplete:
 			if ev.Blocked {
-				return nil, contentPolicyViolation()
+				return "", contentPolicyViolation()
 			}
 			if ev.Text == "" {
-				return nil, noAssistantContent()
+				return "", noAssistantContent()
 			}
-			return completionPayload(turn, ev.Text), nil
+			return ev.Text, nil
 		}
 	}
 	// StreamConversation's reader emits complete or error before closing;
 	// reaching the closed channel means the turn budget expired mid-drain.
-	return nil, streamTimeoutEnvelope()
+	return "", streamTimeoutEnvelope()
 }
 
 func contentPolicyViolation() *pluginabi.Error {
@@ -266,11 +318,46 @@ func streamTimeoutEnvelope() *pluginabi.Error {
 	return e
 }
 
+// resolveAnswer parses the assembled assistant text into the OpenAI answer
+// shape: the (markup-stripped) content, the tool_calls entries (each with a
+// fresh call_<uuid> id and the JSON-string arguments) and the finish_reason.
+// toolMode gates the parse: without a tools array the text is prose and the
+// answer is a normal stop completion — incidental XML never becomes calls.
+func resolveAnswer(turn *textTurn, text string) (content string, toolCalls []map[string]any, finish string) {
+	if !turn.toolMode {
+		return text, nil, "stop"
+	}
+	calls := parseToolCalls(text)
+	content = stripToolMarkup(text)
+	finish = "stop"
+	if len(calls) > 0 {
+		finish = "tool_calls"
+		for _, call := range calls {
+			args, _ := json.Marshal(call.args)
+			toolCalls = append(toolCalls, map[string]any{
+				"id":   callID(),
+				"type": "function",
+				"function": map[string]any{
+					"name":      call.name,
+					"arguments": string(args),
+				},
+			})
+		}
+	}
+	return content, toolCalls, finish
+}
+
 // completionPayload renders the pinned chat.completion envelope: the id is
 // the turn's chatcmpl-<uuid>, the model echoes the requested published id,
-// and the usage carries the documented estimate.
-func completionPayload(turn *textTurn, content string) []byte {
-	output := estimateTokens(content)
+// and the usage carries the documented estimate over the RAW assembled text
+// (markup included — the model really generated it).
+func completionPayload(turn *textTurn, text string) []byte {
+	content, toolCalls, finish := resolveAnswer(turn, text)
+	message := map[string]any{"role": "assistant", "content": content}
+	if len(toolCalls) > 0 {
+		message["tool_calls"] = toolCalls
+	}
+	output := estimateTokens(text)
 	envelope := map[string]any{
 		"id":      turn.turnID,
 		"object":  "chat.completion",
@@ -278,8 +365,8 @@ func completionPayload(turn *textTurn, content string) []byte {
 		"model":   turn.modelID,
 		"choices": []map[string]any{{
 			"index":         0,
-			"message":       map[string]any{"role": "assistant", "content": content},
-			"finish_reason": "stop",
+			"message":       message,
+			"finish_reason": finish,
 		}},
 		"usage": map[string]any{
 			"prompt_tokens":     turn.promptTokens,
@@ -390,6 +477,70 @@ func (m *Manager) pumpTextStream(downstreamID string, events <-chan upstream.Con
 	// Channel closed without a terminal event: the turn budget expired
 	// mid-stream. The turn may still be running upstream — typed 504.
 	closeStream(envelopeText(streamTimeoutEnvelope()))
+}
+
+// emitBufferedToolStream is the streaming-with-tools path (controller
+// ruling #3, accepted v1 tradeoff): tool requests are NOT token-streamed.
+// The full upstream turn is drained first (reusing the non-stream
+// assembly), the tool calls are parsed out of the buffered text, and only
+// then are the frames emitted: a role + stripped-prose frame, a finish
+// frame carrying the tool_calls (when any) with finish_reason
+// "tool_calls"/"stop" and the usage estimate, then [DONE]. host.stream.close
+// is issued exactly once on every exit path, as in the pump.
+func (m *Manager) emitBufferedToolStream(downstreamID string, events <-chan upstream.ConvEvent, turn *textTurn, cancelBudget context.CancelFunc) {
+	var closeOnce sync.Once
+	closeStream := func(message string) {
+		closeOnce.Do(func() {
+			cancelBudget()
+			_, _ = m.host.Call(pluginabi.MethodHostStreamClose, streamCloseWire(downstreamID, message))
+		})
+	}
+	defer closeStream("")
+	emit := func(payload []byte) bool {
+		_, err := m.host.Call(pluginabi.MethodHostStreamEmit, streamEmitWire(downstreamID, payload))
+		if err != nil {
+			// The downstream bridge is gone (host aborted); stop emitting
+			// and close once with a static label — no payload material.
+			closeStream("the downstream stream is unavailable")
+			return false
+		}
+		return true
+	}
+
+	text, err := drainTextCompletion(events, turn)
+	if err != nil {
+		closeStream(fmt.Sprintf("%s (http %d)", envelopeText(err), err.HTTPStatus))
+		return
+	}
+	content, toolCalls, finish := resolveAnswer(turn, text)
+
+	// Role chunk first; the stripped prose rides in the same frame when
+	// non-empty (the reference's stream_text_chat_completion pattern of a
+	// role+content first chunk), else a bare role chunk.
+	if content != "" {
+		if !emit(chunkFrame(turn, map[string]any{"role": "assistant", "content": content}, nil)) {
+			return
+		}
+	} else {
+		if !emit(chunkFrame(turn, map[string]any{"role": "assistant"}, nil)) {
+			return
+		}
+	}
+
+	finishReason := finish
+	delta := map[string]any{}
+	if len(toolCalls) > 0 {
+		delta["tool_calls"] = toolCalls
+	}
+	usage := map[string]any{
+		"prompt_tokens":     turn.promptTokens,
+		"completion_tokens": estimateTokens(text),
+		"total_tokens":      turn.promptTokens + estimateTokens(text),
+	}
+	if !emit(chunkFrame(turn, delta, &finishReason, usage)) {
+		return
+	}
+	emit([]byte("data: [DONE]\n\n"))
 }
 
 // envelopeText renders a typed envelope error as "code: message" — the

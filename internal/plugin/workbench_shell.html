@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChatGPT Image Workbench</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #161a22;
+    --border: #262c3a;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #4f8cff;
+    --danger: #e05260;
+    --ok: #3fb96f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header { padding: 18px 22px 6px; }
+  header h1 { margin: 0 0 2px; font-size: 18px; }
+  header .sub { margin: 0; color: var(--muted); font-size: 12px; }
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 16px;
+    padding: 12px 22px 32px;
+    align-items: start;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .modes { display: flex; gap: 6px; margin-bottom: 10px; }
+  .mode {
+    flex: 1;
+    padding: 7px 10px;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font: inherit;
+  }
+  .mode.active { color: var(--text); border-color: var(--accent); background: rgba(79, 140, 255, 0.12); }
+  textarea, select, input[type=text] {
+    width: 100%;
+    background: #10131a;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+  }
+  textarea { resize: vertical; min-height: 74px; }
+  .row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .row label { font-size: 12px; color: var(--muted); display: block; }
+  .row label > select, .row label > input { margin-top: 4px; }
+  .refs { margin-top: 12px; }
+  .refs input[type=file] { font-size: 12px; color: var(--muted); }
+  .thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .thumb {
+    position: relative;
+    width: 72px; height: 72px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb button {
+    position: absolute; top: 2px; right: 2px;
+    width: 18px; height: 18px; line-height: 16px;
+    padding: 0; border: 0; border-radius: 50%;
+    background: rgba(0, 0, 0, 0.65); color: #fff;
+    cursor: pointer; font-size: 11px;
+  }
+  .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+  .run {
+    margin-top: 14px;
+    width: 100%;
+    padding: 10px;
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    border-radius: 8px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .run:disabled { opacity: 0.55; cursor: default; }
+  .banner {
+    display: none;
+    margin-top: 12px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--danger);
+    background: rgba(224, 82, 96, 0.1);
+    color: #f0a3ab;
+    font-size: 13px;
+    word-break: break-word;
+  }
+  .turn { border-top: 1px solid var(--border); padding: 12px 0; }
+  .turn:first-of-type { border-top: 0; padding-top: 0; }
+  .turn .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; word-break: break-word; }
+  .turn .meta b { color: var(--text); font-weight: 600; }
+  .turn .err {
+    padding: 9px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--danger);
+    background: rgba(224, 82, 96, 0.1);
+    color: #f0a3ab;
+    word-break: break-word;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+  }
+  .cell { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .cell img { width: 100%; display: block; background: #0b0d12; }
+  .cell .rev {
+    padding: 7px 9px;
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    word-break: break-word;
+    max-height: 72px;
+    overflow: auto;
+  }
+  .cell.fail {
+    padding: 10px;
+    font-size: 12px;
+    color: #f0a3ab;
+    border-color: rgba(224, 82, 96, 0.5);
+    word-break: break-word;
+  }
+  .spin {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: -2px;
+    margin-right: 7px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #history-list { list-style: none; margin: 0; padding: 0; }
+  #history-list li {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 7px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    cursor: pointer;
+  }
+  #history-list li:hover { border-color: var(--accent); }
+  #history-list .h-prev {
+    width: 40px; height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #0b0d12;
+  }
+  #history-list .h-body { min-width: 0; flex: 1; }
+  #history-list .h-prompt {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #history-list .h-time { font-size: 11px; color: var(--muted); }
+  #history-list .h-del {
+    border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; font-size: 13px; padding: 2px 4px;
+  }
+  #history-list .h-del:hover { color: var(--danger); }
+  .clear {
+    float: right;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 6px;
+    font-size: 11px;
+    padding: 3px 8px;
+    cursor: pointer;
+  }
+  .clear:hover { color: var(--danger); border-color: var(--danger); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ChatGPT Image Workbench</h1>
+  <p class="sub">chatgpt-proxy provider &middot; synchronous pipeline &middot; history stays in this browser</p>
+</header>
+
+<main>
+  <section>
+    <div class="card" id="composer">
+      <div class="modes">
+        <button id="mode-generate" class="mode active" type="button">Generate</button>
+        <button id="mode-edit" class="mode" type="button">Edit</button>
+      </div>
+      <textarea id="prompt" placeholder="Describe the image to draw..."></textarea>
+      <div class="row">
+        <label>Model
+          <select id="model"></select>
+        </label>
+        <label>Size
+          <select id="size">
+            <option value="">auto</option>
+            <option>1024x1024</option>
+            <option>1536x1024</option>
+            <option>1024x1536</option>
+            <option>1365x1024</option>
+            <option>1024x1365</option>
+          </select>
+        </label>
+        <label>Quality
+          <select id="quality">
+            <option value="">auto</option>
+            <option>low</option>
+            <option>medium</option>
+            <option>high</option>
+          </select>
+        </label>
+        <label>Count (1&ndash;4)
+          <select id="count">
+            <option>1</option>
+            <option>2</option>
+            <option>3</option>
+            <option>4</option>
+          </select>
+        </label>
+        <label>Credential
+          <input id="credential" type="text" placeholder="first account" autocomplete="off">
+        </label>
+      </div>
+      <div class="refs" id="refs" hidden>
+        <input id="ref-input" type="file" accept="image/*" multiple>
+        <div class="thumbs" id="ref-thumbs"></div>
+        <p class="hint">Reference images are read in the browser and posted as data-URLs.</p>
+      </div>
+      <button id="run" class="run" type="button">Generate</button>
+      <div class="banner" id="banner"></div>
+    </div>
+
+    <div class="card" id="turns-card" style="margin-top: 16px;">
+      <h2>Results</h2>
+      <div id="turns"></div>
+    </div>
+  </section>
+
+  <aside class="card" id="history-card">
+    <h2><button id="clear-history" class="clear" type="button">clear</button>History</h2>
+    <ul id="history-list"></ul>
+    <p class="hint">Stored in this browser only (localStorage) &mdash; nothing is written to the server.</p>
+  </aside>
+</main>
+
+<script>
+"use strict";
+
+// The workbench talks to the plugin's authenticated management routes on the
+// same origin; the page itself is a data-free static shell (no credentials,
+// no config, nothing dynamic in these bytes).
+var API_BASE = "/v0/management/chatgpt-proxy/workbench";
+var LS_HISTORY = "chatgpt-proxy:workbench:history";
+var LS_LAST = "chatgpt-proxy:workbench:last";
+var HISTORY_CAP = 30;
+
+function $(id) { return document.getElementById(id); }
+
+var mode = "generate";
+var refs = []; // { name, dataUrl }
+var busy = false;
+
+// ---------------------------------------------------------------- fetch ---
+
+async function api(path, body) {
+  var res = await fetch(API_BASE + path, {
+    method: body ? "POST" : "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: 'include',
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  var text = await res.text();
+  var data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (err) { data = null; }
+  if (!res.ok) {
+    var code = data && data.error ? data.error.code : "http_" + res.status;
+    var msg = data && data.error ? data.error.message : "request failed";
+    var err2 = new Error(code + ": " + msg);
+    err2.code = code;
+    throw err2;
+  }
+  return data;
+}
+
+// ------------------------------------------------------------- composer ---
+
+function setMode(next) {
+  mode = next;
+  $("mode-generate").classList.toggle("active", mode === "generate");
+  $("mode-edit").classList.toggle("active", mode === "edit");
+  $("refs").hidden = mode !== "edit";
+  $("run").textContent = mode === "edit" ? "Edit" : "Generate";
+}
+
+$("mode-generate").addEventListener("click", function () { setMode("generate"); });
+$("mode-edit").addEventListener("click", function () { setMode("edit"); });
+
+$("ref-input").addEventListener("change", function () {
+  var input = $("ref-input");
+  var files = Array.prototype.slice.call(input.files || []);
+  input.value = "";
+  files.forEach(function (file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      refs.push({ name: file.name, dataUrl: String(reader.result || "") });
+      renderRefThumbs();
+    };
+    reader.onerror = function () { showBanner("Could not read " + file.name + "."); };
+    reader.readAsDataURL(file);
+  });
+});
+
+function renderRefThumbs() {
+  var box = $("ref-thumbs");
+  box.innerHTML = "";
+  refs.forEach(function (ref, i) {
+    var wrap = document.createElement("div");
+    wrap.className = "thumb";
+    var img = document.createElement("img");
+    img.src = ref.dataUrl;
+    img.alt = ref.name;
+    var del = document.createElement("button");
+    del.type = "button";
+    del.textContent = "×";
+    del.title = "remove";
+    del.addEventListener("click", function () {
+      refs.splice(i, 1);
+      renderRefThumbs();
+    });
+    wrap.appendChild(img);
+    wrap.appendChild(del);
+    box.appendChild(wrap);
+  });
+}
+
+function saveLast() {
+  try {
+    localStorage.setItem(LS_LAST, JSON.stringify({
+      model: $("model").value,
+      size: $("size").value,
+      quality: $("quality").value,
+      count: $("count").value,
+      credential: $("credential").value.trim(),
+    }));
+  } catch (err) { /* storage unavailable */ }
+}
+
+function restoreLast() {
+  try {
+    var last = JSON.parse(localStorage.getItem(LS_LAST) || "null");
+    if (!last) return;
+    if (last.size) $("size").value = last.size;
+    if (last.quality) $("quality").value = last.quality;
+    if (last.count) $("count").value = last.count;
+    if (last.credential) $("credential").value = last.credential;
+    if (last.model) $("model").value = last.model;
+  } catch (err) { /* storage unavailable */ }
+}
+
+function showBanner(text) {
+  var banner = $("banner");
+  banner.textContent = text;
+  banner.style.display = text ? "block" : "none";
+}
+
+function setBusyUI(next) {
+  busy = next;
+  var run = $("run");
+  run.disabled = next;
+  run.innerHTML = next
+    ? '<span class="spin"></span>Rendering…'
+    : (mode === "edit" ? "Edit" : "Generate");
+}
+
+// ----------------------------------------------------------------- turn ---
+
+function turnConfigLabel(turn) {
+  var parts = [turn.mode];
+  if (turn.model) parts.push(turn.model.replace(/^chatgpt-proxy\//, ""));
+  if (turn.size) parts.push(turn.size);
+  if (turn.quality) parts.push(turn.quality);
+  if (turn.count && turn.count !== 1) parts.push("×" + turn.count);
+  return parts.join(" · ");
+}
+
+function makeCell(entry) {
+  if (entry.b64) {
+    var cell = document.createElement("div");
+    cell.className = "cell";
+    var img = document.createElement("img");
+    img.src = "data:image/png;base64," + entry.b64;
+    img.alt = entry.revised_prompt || "generated image";
+    cell.appendChild(img);
+    if (entry.revised_prompt) {
+      var rev = document.createElement("div");
+      rev.className = "rev";
+      rev.textContent = entry.revised_prompt;
+      cell.appendChild(rev);
+    }
+    return cell;
+  }
+  var fail = document.createElement("div");
+  fail.className = "cell fail";
+  fail.textContent = entry.message || "no image returned";
+  return fail;
+}
+
+function renderTurn(turn) {
+  var card = document.createElement("div");
+  card.className = "turn";
+
+  var meta = document.createElement("div");
+  meta.className = "meta";
+  var b = document.createElement("b");
+  b.textContent = turn.prompt || "(no prompt)";
+  meta.appendChild(b);
+  meta.appendChild(document.createTextNode("  —  " + turnConfigLabel(turn)));
+  card.appendChild(meta);
+
+  if (turn.status === "error") {
+    var err = document.createElement("div");
+    err.className = "err";
+    err.textContent = turn.error || "the request failed";
+    card.appendChild(err);
+  } else if (turn.status === "running") {
+    var spin = document.createElement("div");
+    spin.className = "err";
+    spin.innerHTML = '<span class="spin"></span>';
+    card.appendChild(spin);
+  } else {
+    var grid = document.createElement("div");
+    grid.className = "grid";
+    (turn.images || []).forEach(function (entry) {
+      var cell = makeCell(entry);
+      if (entry.preview && !entry.b64) {
+        // history restore: only the shrunken preview is stored
+        var img = cell.querySelector("img");
+        if (img) img.src = entry.preview;
+      }
+      grid.appendChild(cell);
+    });
+    card.appendChild(grid);
+  }
+
+  var box = $("turns");
+  box.insertBefore(card, box.firstChild);
+  return card;
+}
+
+async function run() {
+  if (busy) return;
+  var prompt = $("prompt").value.trim();
+  if (!prompt) { showBanner("Enter a prompt first."); return; }
+  if (mode === "edit" && refs.length === 0) {
+    showBanner("Edit mode needs at least one reference image.");
+    return;
+  }
+  showBanner("");
+  setBusyUI(true);
+
+  var turn = {
+    id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+    mode: mode,
+    prompt: prompt,
+    model: $("model").value,
+    size: $("size").value,
+    quality: $("quality").value,
+    count: parseInt($("count").value, 10),
+    credential: $("credential").value.trim(),
+    createdAt: new Date().toISOString(),
+    status: "running",
+    images: [],
+    error: "",
+  };
+  renderTurn(turn);
+
+  var body = { prompt: prompt, n: turn.count };
+  if (turn.model) body.model = turn.model;
+  if (turn.size) body.size = turn.size;
+  if (turn.quality) body.quality = turn.quality;
+  if (turn.credential) body.credential = turn.credential;
+  if (mode === "edit") body.reference_images = refs.map(function (r) { return r.dataUrl; });
+
+  saveLast();
+  try {
+    var res = await api(mode === "edit" ? "/edit" : "/generate", body);
+    turn.status = "success";
+    turn.images = (res.data || []).map(function (entry) {
+      return {
+        revised_prompt: entry.revised_prompt || "",
+        message: entry.message || "",
+        b64: entry.b64_json || "",
+        preview: "",
+      };
+    });
+    await Promise.all(turn.images.map(async function (img) {
+      if (img.b64) img.preview = await makePreview(img.b64);
+    }));
+  } catch (err) {
+    turn.status = "error";
+    turn.error = err.message || String(err);
+  }
+  setBusyUI(false);
+
+  // Re-render the running card in place.
+  var live = $("turns").firstElementChild;
+  if (live) live.replaceWith(renderTurn(turn));
+  pushHistory(turn);
+}
+
+$("run").addEventListener("click", run);
+$("prompt").addEventListener("keydown", function (e) {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run();
+});
+
+// Shrink one b64 image to a small PNG preview for localStorage history.
+function makePreview(b64) {
+  return new Promise(function (resolve) {
+    try {
+      var img = new Image();
+      img.onload = function () {
+        var scale = Math.min(1, 160 / Math.max(img.width, img.height));
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = function () { resolve(""); };
+      img.src = "data:image/png;base64," + b64;
+    } catch (err) {
+      resolve("");
+    }
+  });
+}
+
+// -------------------------------------------------------------- history ---
+
+function loadHistory() {
+  try {
+    var parsed = JSON.parse(localStorage.getItem(LS_HISTORY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function persistHistory(list) {
+  try {
+    localStorage.setItem(LS_HISTORY, JSON.stringify(list.slice(0, HISTORY_CAP)));
+  } catch (err) {
+    // quota or private mode: history degrades to session-only, silently
+  }
+}
+
+function pushHistory(turn) {
+  var list = loadHistory();
+  list.unshift(turn);
+  persistHistory(list);
+  renderHistory();
+}
+
+function renderHistory() {
+  var ul = $("history-list");
+  ul.innerHTML = "";
+  loadHistory().forEach(function (turn) {
+    var li = document.createElement("li");
+    var preview = turn.images && turn.images[0] && turn.images[0].preview;
+    if (preview) {
+      var img = document.createElement("img");
+      img.className = "h-prev";
+      img.src = preview;
+      img.alt = "";
+      li.appendChild(img);
+    }
+    var bodyBox = document.createElement("div");
+    bodyBox.className = "h-body";
+    var p = document.createElement("div");
+    p.className = "h-prompt";
+    p.textContent = (turn.status === "error" ? "✗ " : "") + turn.prompt;
+    var time = document.createElement("div");
+    time.className = "h-time";
+    time.textContent = turnConfigLabel(turn);
+    bodyBox.appendChild(p);
+    bodyBox.appendChild(time);
+    li.appendChild(bodyBox);
+
+    var del = document.createElement("button");
+    del.className = "h-del";
+    del.type = "button";
+    del.textContent = "×";
+    del.title = "delete";
+    del.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var list = loadHistory().filter(function (t) { return t.id !== turn.id; });
+      persistHistory(list);
+      renderHistory();
+    });
+    li.appendChild(del);
+
+    li.addEventListener("click", function () {
+      setMode(turn.mode);
+      $("prompt").value = turn.prompt || "";
+      if (turn.model) $("model").value = turn.model;
+      if (turn.size) $("size").value = turn.size;
+      if (turn.quality) $("quality").value = turn.quality;
+      if (turn.count) $("count").value = String(turn.count);
+      if (turn.credential) $("credential").value = turn.credential;
+      showBanner("");
+      var box = $("turns");
+      box.innerHTML = "";
+      renderTurn(turn);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    ul.appendChild(li);
+  });
+}
+
+$("clear-history").addEventListener("click", function () {
+  persistHistory([]);
+  renderHistory();
+});
+
+// ----------------------------------------------------------------- init ---
+
+async function loadModels() {
+  try {
+    var res = await api("/models");
+    (res.models || []).forEach(function (id) {
+      var opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = id.replace(/^chatgpt-proxy\//, "");
+      $("model").appendChild(opt);
+    });
+  } catch (err) {
+    showBanner("Could not load models (" + err.message + "). Add an account first — the model select defaults to the drawing route.");
+  }
+  restoreLast();
+}
+
+renderHistory();
+loadModels();
+</script>
+</body>
+</html>

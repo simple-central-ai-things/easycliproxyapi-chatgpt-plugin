@@ -52,10 +52,14 @@ internal/plugin/              Manager + RPC dispatch (the single seam: all
                               password re-login (account recovery) with the
                               auth-flow sentinel PoW, Management API
                               plumbing (management.register/handle routing
-                              the import surface), CPA / sub2api account
-                              imports, per-credential model catalog, quota
-                              cards, text/image/search executors, envelope
-                              helpers, config/credential aliases
+                              the import + workbench surfaces and the
+                              workbench resource page), CPA / sub2api
+                              account imports, the drawing workbench
+                              (workbench.go + the embedded data-free HTML
+                              shell workbench_shell.html), per-credential
+                              model catalog, quota cards, text/image/search
+                              executors, envelope helpers, config/
+                              credential aliases
 internal/upstream/            the upstream reverse protocol: transport seam
                               over the host callbacks, session headers,
                               sentinel/PoW/turnstile VM, conversation SSE +
@@ -107,7 +111,8 @@ the code.
 
   `management_api` is what turns on the host Management API: the host
   invokes `management.register` only when it sees the flag, and the reply
-  lists the plugin-owned import routes (see Account imports below).
+  lists the plugin-owned import + workbench routes and the one workbench
+  browser resource (see Account imports and Drawing workbench below).
 
 - Published model ids (routed by the executor on these exact names):
 
@@ -296,6 +301,61 @@ the code.
     `import_payload_invalid` (400 inline body / 502 remote payload shape),
     `import_save_failed` (500 retryable, the host credential store
     refused).
+- Drawing workbench (plugin-owned image console, F6): the registration
+  reply also carries ONE browser resource — the workbench console page —
+  plus three management routes that drive the existing openai-image
+  pipeline (see the Image executor surface) synchronously:
+
+  | Method | Path | Request body | Response |
+  | --- | --- | --- | --- |
+  | `GET` | `/v0/resource/plugins/easycliproxyapi-chatgpt-provider/chatgpt-proxy/workbench` | — | the HTML shell (`text/html`, the pinned bytes) |
+  | `POST` | `chatgpt-proxy/workbench/generate` | `{prompt, model?, size?, quality?, n?, credential?}` | `{created, data:[{revised_prompt, b64_json}], usage}` |
+  | `POST` | `chatgpt-proxy/workbench/edit` | the generate body + `reference_images:[<data-url or b64>]` | the same images envelope |
+  | `GET` | `chatgpt-proxy/workbench/models` | — | `{models:[<two published image ids>]}` |
+
+  (The management paths are under `/v0/management/`; the resource path is
+  the browser-navigable full path the host serves.)
+  - The shell is a SINGLE self-contained HTML page (inline CSS/JS, no
+    external assets, no build step), embedded into the `.so` and served
+    byte-exact. It is **DATA-FREE** (security rule, pinned by
+    `TestWorkbenchShellIsDataFree`): its bytes carry no credential, token,
+    email or config value — all dynamic data arrives from the management
+    routes above via same-origin `fetch(..., {credentials:'include'})`.
+    The host's resource path (`ServeResourceHTTP`) writes the body verbatim
+    — no CSP injection, no sanitizing — which is what makes inline JS in
+    the raw page safe and servable; the data routes themselves are
+    management-authenticated by the host before dispatch.
+  - Credential selection (the management context has no host-injected
+    record): the optional `credential` field is an auth-file name and
+    selects that exact own-provider entry via host.auth.list/get (the
+    import's `knownAccessTokens` pattern); an absent name defaults to the
+    FIRST own-provider entry (store order). An empty store answers
+    `404 workbench_credential_missing` pointing at the import routes, a
+    foreign name `404 workbench_credential_not_found`, and a refused or
+    unreadable store leg `500 workbench_store_unavailable` (retryable).
+    The acquired file name becomes the turn's auth file, so the pipeline's
+    401 refresh-retry persists to the right record.
+  - The `model` field is a published image id (`chatgpt-proxy/gpt-image-2-proxy`
+    → drawing route, `chatgpt-proxy/codex-gpt-image-2` → codex route; the
+    models route answers the true ids of the registered config); absent
+    `model` defaults to the drawing route, anything else is the typed
+    `model_unknown`. `n` is validated 1..4 by the executor's own
+    `validateImageCount` (the workbench count IS the executor's n —
+    sequential in one attempt; NOT the reference web's 1..100-per-task).
+    Edit references decode through the existing `decodeReferenceImages`
+    path (data-URL / bare base64 / binary, the 10-image cap enforced).
+  - Deliberate simplifications vs the reference's web image app (the
+    interaction oracle): SYNCHRONOUS — the reference is a separate HTTP
+    server with background workers, so it answers a task id and polls;
+    this plugin runs the pipeline inline in the host process, so each
+    generate/edit POST runs the whole turn and returns the result grid
+    directly (no task/poll loop). CLIENT-SIDE HISTORY — the shell keeps
+    its history in the BROWSER's localStorage (prompt/config per turn +
+    shrunken previews), exactly like the reference's image-conversations
+    store; there is NO server-side history store. Pipeline failures answer
+    the executor's typed codes unchanged (`invalid_request`, `model_unknown`,
+    `content_policy_violation`, `invalid_token`, `upstream_error`, ...) —
+    one vocabulary for the image surface.
 - Executor surface (text, `openai` format): conversation turns arrive as
   `executor.execute` / `executor.execute_stream` in the `openai` format.
   Model resolution strips the `chatgpt-proxy/openai/` prefix to the
@@ -459,6 +519,9 @@ the code.
 | `import_remote_failed` | 502 | yes | import |
 | `import_payload_invalid` | 400, 502 | no | import |
 | `import_save_failed` | 500 | yes | import |
+| `workbench_credential_missing` | 404 | no | workbench |
+| `workbench_credential_not_found` | 404 | no | workbench |
+| `workbench_store_unavailable` | 500 | yes | workbench |
 <!-- /matrix:errors -->
 
   `rate_limited` carries `Retry-After` when upstream sends it;
@@ -482,7 +545,16 @@ the code.
   import aborts typed rather than saving blind); the rest, and every
   per-file error entry, carry fixed text only — the "import" pins in
   `matrix_test.go` drive the routes offline against a scripted host
-  transport.
+  transport. The workbench credential classes
+  (`workbench_credential_missing` … `workbench_store_unavailable`) come
+  from the drawing workbench's store acquisition (see Drawing workbench
+  below): `workbench_credential_missing` answers when no `chatgpt-proxy`
+  credential exists yet and points at the import routes,
+  `workbench_credential_not_found` when an explicit `credential` name is
+  not an own-provider entry, and `workbench_store_unavailable` (retryable)
+  for a refused/unreadable host.auth.list/get leg; pipeline failures on
+  the workbench reuse the executor's codes unchanged — the "workbench"
+  pins in `matrix_test.go` drive the routes offline.
 - Image executor surface (`openai-image`, the image surface note): the
   host's `/v1/images/generations` and `/v1/images/edits` arrive at
   `executor.execute` / `executor.execute_stream` untranslated and are

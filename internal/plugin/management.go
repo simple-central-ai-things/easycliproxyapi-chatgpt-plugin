@@ -1,20 +1,29 @@
 package plugin
 
-// Management API plumbing (F5): the import surface (import.go) is exposed
-// through the host's Management API. The host invokes management.register
-// once at startup; the reply lists the plugin-owned routes by method +
-// path + description ONLY — the SDK's Handler field is a Go function
-// pointer and does not cross the ABI, and the host's RPC adapter attaches
-// itself as the callback target. Every hit on a registered route then comes
-// back as a management.handle RPC carrying an already-authenticated
-// ManagementRequest (the host authenticates management traffic before
-// dispatching it). The plugin therefore owns an internal exact-path router:
-// paths are exact (no path params), relative under /v0/management/, and the
-// host sends them back full-path.
+// Management API plumbing (F5+F6): the import surface (import.go) and the
+// drawing workbench (workbench.go) are exposed through the host's
+// Management API. The host invokes management.register once at startup; the
+// reply lists the plugin-owned routes by method + path + description ONLY —
+// the SDK's Handler field is a Go function pointer and does not cross the
+// ABI, and the host's RPC adapter attaches itself as the callback target.
+// Every hit on a registered route then comes back as a management.handle RPC
+// carrying an already-authenticated ManagementRequest (the host
+// authenticates management traffic before dispatching it). The plugin
+// therefore owns an internal exact-path router: paths are exact (no path
+// params), relative under /v0/management/, and the host sends them back
+// full-path.
 //
-// GET import routes carry NO Menu label: a GET route with a Menu would be
+// The registration reply also carries browser RESOURCES (F6): the host
+// resolves each relative path under /v0/resource/plugins/<pluginID>/ and
+// dispatches the GET through management.handle with the FULL resource path
+// and no body (the host's ServeResourceHTTP builds the request itself).
+// Resource paths therefore travel through the internal router un-normalized
+// (normalizeManagementPath keeps anything outside /v0/management/ as-is).
+//
+// Management routes carry NO Menu label: a GET route with a Menu would be
 // diverted by the host to the browser-resource surface (/v0/resource/...),
-// which is NOT management-authenticated.
+// which is NOT management-authenticated — the resource itself is declared
+// in the reply's `resources` instead.
 
 import (
 	"encoding/json"
@@ -39,10 +48,13 @@ type managementRegistrationRequest struct {
 }
 
 // managementRegistrationResult mirrors the host's
-// rpcManagementRegistrationResponse: the reply lists routes only. No
-// resources — the plugin serves no browser-navigable surface.
+// rpcManagementRegistrationResponse: the reply lists routes and resources
+// only (method + path + description — no handler to cross the ABI). The
+// host's RPC adapter (rpc_client.go RegisterManagement) attaches itself as
+// the callback target for both.
 type managementRegistrationResult struct {
-	Routes []pluginapi.ManagementRoute `json:"routes,omitempty"`
+	Routes    []pluginapi.ManagementRoute `json:"routes,omitempty"`
+	Resources []pluginapi.ResourceRoute   `json:"resources,omitempty"`
 }
 
 // managementHandleRequest mirrors the host's rpcManagementRequest: the SDK
@@ -97,9 +109,9 @@ type managementRouteSpec struct {
 	handle      func(m *Manager, req managementHandleRequest) pluginapi.ManagementResponse
 }
 
-// managementRouteSpecs is the complete import route set (import.go). The
-// host registers each (METHOD, fullPath) pair exactly; anything not listed
-// never reaches the plugin.
+// managementRouteSpecs is the complete management route set (import.go +
+// workbench.go). The host registers each (METHOD, fullPath) pair exactly;
+// anything not listed never reaches the plugin.
 func managementRouteSpecs() []managementRouteSpec {
 	return []managementRouteSpec{
 		{
@@ -132,6 +144,38 @@ func managementRouteSpecs() []managementRouteSpec {
 			description: "Import selected accounts from a sub2api admin server (body: base_url + email + password + accounts)",
 			handle:      (*Manager).handleImportSub2api,
 		},
+		{
+			method:      http.MethodPost,
+			path:        workbenchRouteGenerate,
+			description: "Generate images synchronously (body: prompt, model?, size?, quality?, n?, credential?) — the drawing workbench",
+			handle:      (*Manager).handleWorkbenchGenerate,
+		},
+		{
+			method:      http.MethodPost,
+			path:        workbenchRouteEdit,
+			description: "Edit images from reference_images synchronously (body: prompt, model?, size?, quality?, n?, reference_images[], credential?) — the drawing workbench",
+			handle:      (*Manager).handleWorkbenchEdit,
+		},
+		{
+			method:      http.MethodGet,
+			path:        workbenchRouteModels,
+			description: "List the published image model ids the workbench can drive",
+			handle:      (*Manager).handleWorkbenchModels,
+		},
+	}
+}
+
+// managementResourceSpec merges the one browser resource into the internal
+// exact-path table: the host dispatches its GET through management.handle
+// with the FULL /v0/resource/plugins/<pluginID>/ path (see the file doc), so
+// the table key is the full path, unlike the management routes' relative
+// keys.
+func managementResourceSpec() managementRouteSpec {
+	return managementRouteSpec{
+		method:      http.MethodGet,
+		path:        workbenchResourceFullPath,
+		description: "Serve the data-free workbench shell (text/html)",
+		handle:      (*Manager).handleWorkbenchShell,
 	}
 }
 
@@ -148,7 +192,10 @@ var managementRoutes = buildManagementRouteTable()
 func buildManagementRouteTable() managementRouteTable {
 	byKey := map[string]managementRouteSpec{}
 	byPath := map[string]map[string]managementRouteSpec{}
-	for _, spec := range managementRouteSpecs() {
+	// The management routes (relative keys) plus the one resource (full
+	// key — the host sends the resource path back as-is).
+	specs := append(managementRouteSpecs(), managementResourceSpec())
+	for _, spec := range specs {
 		byKey[spec.method+" "+spec.path] = spec
 		if byPath[spec.path] == nil {
 			byPath[spec.path] = map[string]managementRouteSpec{}
@@ -159,18 +206,27 @@ func buildManagementRouteTable() managementRouteTable {
 }
 
 // normalizeManagementPath reduces a management.handle path to the table's
-// key form: full paths arrive under the /v0/management prefix (how the host
-// sends them); relative forms and trailing slashes are tolerated too.
+// key form: management paths arrive under the /v0/management prefix (how
+// the host sends them) and are keyed relative — relative forms and trailing
+// slashes are tolerated too. Resource paths arrive FULL (the host's
+// ServeResourceHTTP builds the request itself) and are keyed as-is, so
+// anything outside the management prefix passes through untouched.
 func normalizeManagementPath(raw string) string {
 	path := strings.TrimSpace(raw)
+	if !strings.HasPrefix(path, managementBasePath) {
+		return path
+	}
 	path = strings.TrimPrefix(path, managementBasePath)
 	path = strings.TrimLeft(path, "/") // double slashes after the prefix tolerated
 	return strings.TrimRight(path, "/")
 }
 
 // handleManagementRegister implements management.register: it replies with
-// the exact import route set — method + path + description only (no handler
-// to cross the ABI, no Menu label to divert the GET routes).
+// the exact management route set (import.go + workbench.go) and the one
+// browser resource — method + path + description only (no handler to cross
+// the ABI, no Menu label on a management route). The resource is registered
+// by its relative path under /v0/resource/plugins/<pluginID>/ (the host
+// resolves it); its Menu is what makes it browser-navigable.
 func (m *Manager) handleManagementRegister(request []byte) ([]byte, error) {
 	var req managementRegistrationRequest
 	if err := json.Unmarshal(request, &req); err != nil {
@@ -185,7 +241,10 @@ func (m *Manager) handleManagementRegister(request []byte) ([]byte, error) {
 			Description: spec.description,
 		})
 	}
-	return ok(managementRegistrationResult{Routes: routes}), nil
+	return ok(managementRegistrationResult{
+		Routes:    routes,
+		Resources: managementResourceSpecs(),
+	}), nil
 }
 
 // handleManagementHandle implements management.handle: decode the

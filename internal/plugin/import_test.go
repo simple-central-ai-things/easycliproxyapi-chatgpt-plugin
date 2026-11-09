@@ -31,6 +31,11 @@ type importFakeCaller struct {
 	store      map[string]json.RawMessage // file name → credential JSON
 	storeOrder []string
 
+	// noIndex holds file names that appear in host.auth.list WITHOUT a
+	// runtime auth_index (the disk-only listing form): the record cannot be
+	// read through host.auth.get.
+	noIndex map[string]bool
+
 	listError string // when set, host.auth.list / host.auth.get refuse
 	saveError string // when set, host.auth.save refuses
 }
@@ -65,9 +70,11 @@ func (f *importFakeCaller) Call(method string, request []byte) ([]byte, error) {
 		}
 		entries := make([]hostAuthFileEntry, 0, len(f.storeOrder))
 		for i, name := range f.storeOrder {
-			entries = append(entries, hostAuthFileEntry{
-				Name: name, Type: providerKey, AuthIndex: strconv.Itoa(i + 1),
-			})
+			entry := hostAuthFileEntry{Name: name, Type: providerKey}
+			if !f.noIndex[name] {
+				entry.AuthIndex = strconv.Itoa(i + 1)
+			}
+			entries = append(entries, entry)
 		}
 		return hostOK(map[string]any{"files": entries}), nil
 	case pluginabi.MethodHostAuthGet:
@@ -218,9 +225,11 @@ func TestRegisterEnvelopeManagementAPI(t *testing.T) {
 }
 
 // TestManagementRegisterListsImportRoutes pins the management.register
-// reply: exactly the five import routes, by method + path + description —
-// no handler (it cannot cross the ABI), no Menu (a Menu-tagged GET would be
-// diverted to the unauthenticated resource surface).
+// reply: exactly the five import routes plus the three workbench routes, by
+// method + path + description — no handler (it cannot cross the ABI), no Menu
+// on a management route (a Menu-tagged GET would be diverted to the
+// unauthenticated resource surface) — and exactly the one workbench browser
+// resource (the data-free HTML shell).
 func TestManagementRegisterListsImportRoutes(t *testing.T) {
 	m := newTestManager(t)
 	body, _ := json.Marshal(managementRegistrationRequest{BasePath: "/v0/management"})
@@ -243,6 +252,9 @@ func TestManagementRegisterListsImportRoutes(t *testing.T) {
 		importRouteCpaRemote:       http.MethodPost,
 		importRouteSub2apiAccounts: http.MethodGet,
 		importRouteSub2api:         http.MethodPost,
+		workbenchRouteGenerate:     http.MethodPost,
+		workbenchRouteEdit:         http.MethodPost,
+		workbenchRouteModels:       http.MethodGet,
 	}
 	if len(result.Routes) != len(want) {
 		t.Fatalf("register reply lists %d routes, want exactly %d: %+v", len(result.Routes), len(want), result.Routes)
@@ -264,6 +276,26 @@ func TestManagementRegisterListsImportRoutes(t *testing.T) {
 		if route.Description == "" {
 			t.Fatalf("route %q has no description for the panel", route.Path)
 		}
+	}
+
+	// The one browser resource: the workbench shell, relative under
+	// /v0/resource/plugins/<pluginID>/ (the host resolves and authenticates
+	// nothing for it — the data lives on the management routes).
+	if len(result.Resources) != 1 {
+		t.Fatalf("register reply lists %d resources, want exactly 1: %+v", len(result.Resources), result.Resources)
+	}
+	resource := result.Resources[0]
+	if resource.Path != workbenchResourcePath {
+		t.Fatalf("resource path = %q, want %q", resource.Path, workbenchResourcePath)
+	}
+	if resource.Menu != workbenchResourceMenu {
+		t.Fatalf("resource Menu = %q, want %q", resource.Menu, workbenchResourceMenu)
+	}
+	if resource.Description == "" {
+		t.Fatal("resource has no description for the panel")
+	}
+	if resource.Handler != nil {
+		t.Fatal("resource carries a Handler; function pointers do not cross the ABI")
 	}
 }
 

@@ -153,3 +153,40 @@ bridge, plan persisted as `plus`):
 These confirm the register → login → models → text turn → image turn chain
 end-to-end on the live gateway. The remaining operator-gated items are the
 formal standalone spike runs, not blockers.
+
+## v0.2.0 Phase-2 live serving verification (2026-11-09)
+
+The Phase-2 `.so` was deployed to the live gateway (plugin registered at
+`version=0.2.0` in the startup log) and verified end-to-end against the live
+ChatGPT Plus credential, through the public gateway port:
+
+- **Responses API (`openai-response`):** `POST /v1/responses` → **HTTP 200**,
+  the `response.completed` envelope (`object:"response"`, `id:"resp_<hex>"`,
+  `output[].message` with `output_text`), model echo of the requested name.
+- **Anthropic Messages (`claude`):** `POST /v1/messages` → **HTTP 200**, the
+  `message` envelope (`id:"msg_<uuid>"`, `content[].text`,
+  `stop_reason:"end_turn"`, `stop_sequence:null`, usage).
+- **Web search:** `POST /v1/chat/completions` carrying a `web_search_preview`
+  tool → **HTTP 200**, the cited answer with `url_citation` annotations
+  (real fetched sources) — the search flow (prepare + `force_use_search` +
+  poll) ran against the live backend.
+- **Import routes (registration + dispatch only, no credential written):**
+  `POST chatgpt-proxy/import/cpa-file` with an empty body → typed
+  `import_payload_invalid` 400; `GET chatgpt-proxy/import/cpa-remote/files`
+  and `GET chatgpt-proxy/import/sub2api/accounts` against an unreachable
+  server → typed retryable `import_remote_failed` 502. A real import (writing
+  a `host.auth.save` record) is operator-gated: it needs a live CPA/sub2api
+  server or a codex export.
+- **Drawing workbench:** the resource page is served unauthenticated at
+  `/v0/resource/plugins/<plugin-id>/chatgpt-proxy/workbench` (**HTTP 200**,
+  ~20 KB self-contained HTML, inline script only, client-side history keys);
+  `GET .../workbench/models` → **HTTP 200** with both published image ids;
+  `POST .../workbench/generate` (n=1, low quality) → **HTTP 200** in ~36 s,
+  one inline `b64_json` entry with valid PNG magic; `POST .../workbench/edit`
+  with a data-URL reference → **HTTP 200**, one valid PNG.
+- **openai regression:** `POST /v1/chat/completions` still → **HTTP 200**
+  chat.completion envelope.
+
+Operator-gated (needs the account's email+password or a real import source,
+which are not recorded here): a live `auth.login.password` recovery and a
+real CPA/sub2api credential import.

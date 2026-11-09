@@ -88,21 +88,22 @@ network, no credentials, no host binary — and by CI, which builds the glibc
 
 The v0.1.0 live-verification items remain operator-gated (TLS fingerprint
 spike, live executor smoke, SCPM gateway integration) — see
-`PROVENANCE.md` for the verdict ledger. On top of that, the Phase 2 surface
-needs its live pass after the v0.2.0 deploy:
+`PROVENANCE.md` for the verdict ledger.
 
-- one `/v1/responses` and one `/v1/messages` turn (streaming and
-  non-streaming) through the gateway;
-- one web-search turn (a `web_search` tool request) returning cited
-  sources;
+After the v0.2.0 deploy, `PROVENANCE.md` records a live serving pass
+(2026-11-09): one `/v1/responses` turn, one `/v1/messages` turn, a
+web-search turn returning cited sources, the workbench resource page +
+models + generate + edit rounds (all against the live ChatGPT Plus
+credential, through the public gateway port), and the import routes
+proven registered + dispatching (typed validation / remote-failure
+responses, no credential written).
+
+Still operator-gated (they need credentials this repo must not hold):
+
 - one `auth.login.password` recovery on a sacrificial account (OTP-enabled
   accounts must refuse typed, not hang);
-- one CPA or sub2api import through the EasyCLI panel, confirming the saved
-  record serves text turns;
-- opening the workbench resource page and one generate + one edit round.
-
-Record live evidence in `PROVENANCE.md` and the private ops doc as it
-lands.
+- a real CPA or sub2api credential import through the EasyCLI panel,
+  confirming the saved record serves text turns.
 
 ## Remaining gaps (post-Phase-2)
 

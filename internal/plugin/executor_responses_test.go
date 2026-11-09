@@ -92,7 +92,7 @@ func TestResponsesInputMapping(t *testing.T) {
 			"instructions": "Be brief.",
 			"input":        "Say hello",
 		})
-		messages, effort, toolMode, apiErr := shapeResponseRequest(body)
+		messages, effort, toolMode, apiErr := shapeResponseRequest(body, false)
 		if apiErr != nil {
 			t.Fatalf("shapeResponseRequest: %+v", apiErr)
 		}
@@ -114,7 +114,7 @@ func TestResponsesInputMapping(t *testing.T) {
 				map[string]any{"type": "function_call_output", "call_id": "call-1", "output": "25C"},
 			},
 		})
-		messages, _, toolMode, apiErr := shapeResponseRequest(body)
+		messages, _, toolMode, apiErr := shapeResponseRequest(body, false)
 		if apiErr != nil {
 			t.Fatalf("shapeResponseRequest: %+v", apiErr)
 		}
@@ -143,7 +143,7 @@ func TestResponsesInputMapping(t *testing.T) {
 				map[string]any{"type": "output_text", "text": " world"},
 			},
 		})
-		messages, _, _, apiErr := shapeResponseRequest(body)
+		messages, _, _, apiErr := shapeResponseRequest(body, false)
 		if apiErr != nil {
 			t.Fatalf("shapeResponseRequest: %+v", apiErr)
 		}
@@ -160,7 +160,7 @@ func TestResponsesInputMapping(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				want := effortFromAny(t, body)
-				_, effort, _, apiErr := shapeResponseRequest(responsesJSON(t, body))
+				_, effort, _, apiErr := shapeResponseRequest(responsesJSON(t, body), false)
 				if apiErr != nil {
 					t.Fatalf("shapeResponseRequest: %+v", apiErr)
 				}
@@ -174,7 +174,7 @@ func TestResponsesInputMapping(t *testing.T) {
 	t.Run("empty input is a typed request error", func(t *testing.T) {
 		for name, input := range map[string]any{"absent": nil, "blank string": "   "} {
 			t.Run(name, func(t *testing.T) {
-				_, _, _, apiErr := shapeResponseRequest(responsesJSON(t, map[string]any{"input": input}))
+				_, _, _, apiErr := shapeResponseRequest(responsesJSON(t, map[string]any{"input": input}), false)
 				if apiErr == nil || apiErr.Code != "invalid_request" || apiErr.HTTPStatus != http.StatusBadRequest {
 					t.Fatalf("apiErr = %+v, want typed 400 invalid_request", apiErr)
 				}
@@ -190,7 +190,7 @@ func TestResponsesInputMapping(t *testing.T) {
 				}},
 			},
 		})
-		_, _, _, apiErr := shapeResponseRequest(body)
+		_, _, _, apiErr := shapeResponseRequest(body, false)
 		if apiErr == nil || apiErr.Code != "invalid_request" {
 			t.Fatalf("apiErr = %+v, want typed invalid_request (image inputs need the image_generation path)", apiErr)
 		}
@@ -203,7 +203,7 @@ func TestResponsesInputMapping(t *testing.T) {
 				map[string]any{"type": "function", "name": "get_weather", "description": "Weather", "parameters": map[string]any{"type": "object"}},
 			},
 		})
-		messages, _, toolMode, apiErr := shapeResponseRequest(body)
+		messages, _, toolMode, apiErr := shapeResponseRequest(body, false)
 		if apiErr != nil || !toolMode {
 			t.Fatalf("apiErr = %+v toolMode = %v, want the emulated tool mode", apiErr, toolMode)
 		}
@@ -215,7 +215,7 @@ func TestResponsesInputMapping(t *testing.T) {
 			"input": "hi",
 			"tools": []any{map[string]any{"type": "web_search_preview"}},
 		})
-		_, _, _, apiErr = shapeResponseRequest(webSearch)
+		_, _, _, apiErr = shapeResponseRequest(webSearch, false)
 		if apiErr == nil || apiErr.Code != "tools_unsupported" || apiErr.HTTPStatus != http.StatusBadRequest {
 			t.Fatalf("apiErr = %+v, want typed 400 tools_unsupported", apiErr)
 		}

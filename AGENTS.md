@@ -11,8 +11,8 @@ panel/management paths same-origin on the one gateway port.
 
 - ChatGPT consumer accounts (OAuth + refresh-token lifecycle) are served as a
   first-class EasyCLI provider: browser OAuth login, per-credential upstream
-  model discovery, streaming text conversation, image generation/editing, and
-  native subscription quota cards.
+  model discovery, streaming text conversation, web search (cited answers),
+  image generation/editing, and native subscription quota cards.
 - Each account is a host auth file (`type: "chatgpt-proxy"`, stable hash
   name, never an email). The host AuthManager owns the account pool —
   rotation, retry, enable/disable via the EasyCLI panel. There is no
@@ -91,6 +91,13 @@ internal/plugin/
                               SSE event sequence (event:/data: framing, no
                               [DONE]), tools via the same XML emulation,
                               host-rendered Anthropic error envelopes
+  executor_search.go          the web-search turn: detection (web_search
+                              tools / tool_choice / web_search_options /
+                              search model prefix → the search flow, else
+                              the plain pipeline), the 401 refresh-retry
+                              run loop, the cited-answer rendering
+                              (Sources block + url_citation annotations),
+                              the typed search error mapping
   matrix_test.go              pins the README contract matrices to the
                               dispatcher / registration / ParseConfig
   *_test.go                   offline unit tests against a fake caller
@@ -98,9 +105,11 @@ internal/upstream/            the upstream reverse protocol: transport seam
                               over the host callbacks, session headers,
                               sentinel/PoW/turnstile VM, conversation SSE +
                               patch protocol, poll, profile/quota probe,
-                              web-drawing + codex image routes, files trio;
-                              golden-file tests (testdata/) pin the wire
-                              payloads
+                              web-drawing + codex image routes, the
+                              web-search route (prepare + f/conversation
+                              force_use_search + conversation poll + source
+                              extraction), files trio; golden-file tests
+                              (testdata/) pin the wire payloads
 tests/loadsmoke/              dlopen() load smoke: the built .so through the
                               real C ABI against a fake host (offline; skips
                               when the artifact is absent; CI builds first)

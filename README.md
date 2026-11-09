@@ -2,8 +2,8 @@
 
 A Go `c-shared` plugin (a `.so`) compiled INTO the EasyCLI/CLIProxyAPI v8
 host that exposes ChatGPT consumer-account capabilities — streaming text
-conversation and image generation/editing — as the OpenAI-compatible
-provider **`chatgpt-proxy`**.
+conversation, web search, and image generation/editing — as the
+OpenAI-compatible provider **`chatgpt-proxy`**.
 
 ## What
 
@@ -12,8 +12,8 @@ provider **`chatgpt-proxy`**.
   `easycliproxyapi-chatgpt-provider`.
 - Advertised capabilities: `auth_provider` (browser OAuth + refresh-token
   lifecycle), `model_provider` (per-credential upstream catalog),
-  `executor` (formats `openai` and `openai-image`), and `quota_provider`
-  (native host panel cards).
+  `executor` (formats `openai`, `openai-image`, `openai-response`, `claude`),
+  and `quota_provider` (native host panel cards).
 
 ## Why
 
@@ -49,14 +49,15 @@ internal/plugin/              Manager + RPC dispatch (the single seam: all
                               identity constants, registration envelope,
                               auth parse/refresh, browser OAuth login,
                               per-credential model catalog, quota cards,
-                              text + image executors, envelope helpers,
+                              text/image/search executors, envelope helpers,
                               config/credential aliases
 internal/upstream/            the upstream reverse protocol: transport seam
                               over the host callbacks, session headers,
                               sentinel/PoW/turnstile VM, conversation SSE +
                               patch protocol, poll, profile/quota probe,
-                              web-drawing + codex image routes, files trio;
-                              golden-file tests pin the wire payloads
+                              web-drawing + codex image routes, web-search
+                              route, files trio; golden-file tests pin the
+                              wire payloads
 tests/loadsmoke/              dlopen() load smoke: the built .so through the
                               real C ABI against a fake host (skips when the
                               artifact is absent; CI builds it first)
@@ -135,6 +136,9 @@ the code.
 | `request-timeout-secs` | `600` |
 | `tls-mode` | `"stdlib"` |
 | `retry-401-refresh` | `true` |
+| `search-upstream-model` | `"gpt-5-5"` |
+| `search-timeout-secs` | `300` |
+| `search-poll-interval-secs` | `3` |
 <!-- /matrix:config -->
 
   Config parsing is fail-closed and rejects unknown keys — except the
@@ -182,8 +186,9 @@ the code.
   the conversation. Streaming WITH tools is buffered, not token-streamed:
   the whole upstream turn is drained, then emitted as a role frame, a
   finish frame carrying any `tool_calls`, and `[DONE]`. A tools array where
-  no tool carries a usable function name (e.g. built-in web-search tools)
-  is refused with typed `400 tools_unsupported` before any upstream call.
+  no tool carries a usable function name is refused with typed
+  `400 tools_unsupported` before any upstream call — except a
+  web-search tools array, which routes through web search (below).
   `thinking_effort` / `reasoning_effort` map per the upstream table (none
   / auto omitted, low/medium/high as-is, xhigh/extended to
   `extended`). A `401` on the turn start forces the internal token
@@ -192,6 +197,39 @@ the code.
   refresh token, so an unpersisted refresh would break the host's next
   scheduled `auth.refresh`); a failed refresh, a failed save, or a second
   `401` ends in typed `401 invalid_token`.
+  Web search: a request is a SEARCH request (the reference's
+  `is_web_search_chat_request`) when it carries a `web_search` /
+  `web_search_preview` / `web_search_preview_2025_03_11` tool with NO other
+  tools, a `web_search` `tool_choice`, a `web_search_options` block, or a
+  search model prefix on the resolved slug (`gpt-4o-search-preview`,
+  `gpt-4o-mini-search-preview`, `gpt-5-search-api` — exact or with a `-…`
+  version suffix). Search requests run the upstream search flow instead of
+  the plain conversation pipeline: the sentinel handshake, a conduit prepare
+  with `system_hints:["search"]`, the `f/conversation` SSE with
+  `force_use_search` (capturing the conversation id), then a poll of the
+  conversation document until the assistant answer carries a finished status
+  (`finished_successfully` / `finished_partial_completion`) or is stable for
+  two consecutive polls (budget `search-timeout-secs`, interval
+  `search-poll-interval-secs`; the upstream model is
+  `search-upstream-model`). The answer returns in the normal chat envelope:
+  the assistant content is the cited answer — the cleaned text plus a
+  numbered `Sources:` block — with `url_citation` annotations attached to
+  the message (the reference's `text_with_url_citations` /
+  `chat_completion_annotations` shape). Streaming search turns are buffered
+  and emit one role+content frame, the terminal stop frame (usage estimate)
+  and `[DONE]` (annotations are dropped in stream form, as in the
+  reference). A search turn settling with no assistant answer is the typed
+  502 `no_assistant_content`; a poll-budget exhaustion with no extraction is
+  typed 504 `search_poll_timeout`; a malformed search response (missing
+  conduit token, no conversation id in the stream) is typed 502
+  `search_response_malformed`. A search tool mixed with a function tool is
+  NOT a search request: it falls back to the ordinary emulated-tools
+  pipeline (the search flow posts no tools upstream, so the search tool is
+  ignored there). The `openai-response` and `claude` formats detect the same
+  signals (tools + model prefix; the claude format carries no web_search
+  tools, so only the model prefix fires) and answer with the cited text in
+  their normal envelopes — one `output_text` part / one text block; the
+  `url_citation` annotations are an openai-format surface.
 - Executor surface (Responses, `openai-response` format): the host's
   `/v1/responses` requests arrive untranslated and reuse the SAME upstream
   conversation pipeline as the `openai` format — only the inbound decode
@@ -214,10 +252,13 @@ the code.
   `image_generation_call` output items carrying the base64 `result`; a
   missing prompt is typed `400 invalid_request` ("input text is required")
   before any upstream call. Function tools reuse the `openai` format's XML
-  emulation and parse into `function_call` output items; any other tool
-  type (e.g. `web_search_preview`) keeps the typed `400 tools_unsupported`
-  refusal. Tool and image requests buffer the whole turn before emitting
-  the item sequence (documented tradeoff, as with `openai` streaming).
+  emulation and parse into `function_call` output items; a web-search tools
+  array (with no function tool mixed in) or a search model prefix routes
+  through the search flow and answers the cited text as one `output_text`
+  item (see the web-search note in the `openai` surface); any other
+  non-function tool type keeps the typed `400 tools_unsupported` refusal.
+  Tool, image and search requests buffer the whole turn before emitting the
+  item sequence (documented tradeoff, as with `openai` streaming).
 - Executor surface (Anthropic Messages, `claude` format): the host's
   `/v1/messages` requests arrive untranslated and reuse the SAME upstream
   conversation pipeline — only the inbound decode (`system` string or text
@@ -243,7 +284,11 @@ the code.
   sequence at completion; tool blocks announce empty input then one
   `input_json_delta`), and there is NO `data: [DONE]` sentinel —
   `message_stop` is the terminator. The claude request carries no
-  thinking-effort spelling, so the config default applies.
+  thinking-effort spelling, so the config default applies. A search model
+  prefix on the resolved slug routes the turn through the search flow and
+  answers the cited text as one `text` block (Anthropic tools carry no
+  `type`, so the claude format has no web-search tool signal; see the
+  web-search note in the `openai` surface).
 - Error rendering for `claude`: every failure answers the SAME typed
   plugin error envelope as the other formats; the host's Claude handler
   (the `/v1/messages` route) renders it as the Anthropic
@@ -275,6 +320,8 @@ the code.
 | `upstream_error` | 502 | yes | error-map |
 | `content_policy_violation` | 400 | no | error-map |
 | `no_assistant_content` | 502 | no | error-map |
+| `search_poll_timeout` | 504 | yes | error-map |
+| `search_response_malformed` | 502 | no | error-map |
 <!-- /matrix:errors -->
 
   `rate_limited` carries `Retry-After` when upstream sends it;
@@ -357,6 +404,9 @@ artifact.
          request-timeout-secs: 600
          tls-mode: stdlib
          retry-401-refresh: true
+         search-upstream-model: gpt-5-5
+         search-timeout-secs: 300
+         search-poll-interval-secs: 3
    ```
 
    The block is secrets-free on purpose: OAuth credentials come from the

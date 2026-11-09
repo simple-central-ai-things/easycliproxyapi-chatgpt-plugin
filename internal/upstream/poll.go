@@ -54,6 +54,16 @@ type PollOptions struct {
 	// successfully fetched document is returned.
 	Done func(ConversationDoc) bool
 
+	// SkipInitialWait disables the pre-first-fetch wait: the oracle's
+	// search poll starts immediately, unlike the drawing route's 10s
+	// commit delay allowance.
+	SkipInitialWait bool
+	// RetryableStatuses additionally classifies these upstream statuses as
+	// retryable (backed off and re-polled) instead of failing the budget
+	// immediately — the oracle's search swallow set treats 404/409/423 on a
+	// fresh conversation as "not ready yet", not an error.
+	RetryableStatuses map[int]bool
+
 	// sleep and jitter are same-package test seams (fake clock); zero
 	// values select the real implementations.
 	sleep  func(ctx context.Context, d time.Duration) error
@@ -136,12 +146,15 @@ func PollConversation(ctx context.Context, u Upstream, cred model.Credential, co
 
 	// The oracle's initial wait: ChatGPT commits the conversation document
 	// well after the SSE stream closes, and polling immediately trips the
-	// transient 429 the upstream returns within ~200ms of close.
-	if wait := opts.InitialWait + opts.jitter(min(initialWaitJitterCap, opts.InitialWait/5)); wait > 0 {
-		sleepFor := min(wait, max(0, remaining()))
-		if sleepFor > 0 {
-			if err := opts.sleep(ctx, sleepFor); err != nil {
-				return ConversationDoc{}, err
+	// transient 429 the upstream returns within ~200ms of close. The search
+	// poll skips it (oracle _wait_search_result starts fetching immediately).
+	if !opts.SkipInitialWait {
+		if wait := opts.InitialWait + opts.jitter(min(initialWaitJitterCap, opts.InitialWait/5)); wait > 0 {
+			sleepFor := min(wait, max(0, remaining()))
+			if sleepFor > 0 {
+				if err := opts.sleep(ctx, sleepFor); err != nil {
+					return ConversationDoc{}, err
+				}
 			}
 		}
 	}
@@ -191,7 +204,15 @@ func PollConversation(ctx context.Context, u Upstream, cred model.Credential, co
 		}
 		if err := statusError(resp.StatusCode, parseRetryAfter(resp.Headers)); err != nil {
 			var convErr *ConvError
-			if errors.As(err, &convErr) && convErr.Retryable {
+			errors.As(err, &convErr)
+			// A 401 is never retried here (the oracle's immediate branch);
+			// the search swallow set (404/409/423) and ordinary 429/5xx
+			// back off and re-poll.
+			retryable := convErr != nil &&
+				resp.StatusCode != http.StatusUnauthorized &&
+				(convErr.Retryable ||
+					(opts.RetryableStatuses != nil && opts.RetryableStatuses[resp.StatusCode]))
+			if retryable {
 				if ok, sleepErr := retrySleep(attempt, parseRetryAfter(resp.Headers)); ok {
 					continue
 				} else if sleepErr != nil {

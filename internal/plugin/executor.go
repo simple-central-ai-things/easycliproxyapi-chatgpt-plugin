@@ -82,6 +82,20 @@ func (m *Manager) handleExecutorExecute(request []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), turnBudget(turn.cfg))
 	defer cancel()
 
+	if turn.searchMode {
+		// Web search runs to completion inside Handle (the whole prepare +
+		// SSE + poll) and answers the cited chat.completion.
+		result, apiErr := m.runSearchTurn(ctx, turn, req.HostCallbackID)
+		if apiErr != nil {
+			return errEnvelope(apiErr), nil
+		}
+		payload, apiErr := searchCompletionPayload(turn, result)
+		if apiErr != nil {
+			return errEnvelope(apiErr), nil
+		}
+		return ok(pluginapi.ExecutorResponse{Payload: payload}), nil
+	}
+
 	ch, err := m.runTextTurnStart(ctx, turn, req.HostCallbackID)
 	if err != nil {
 		return errEnvelope(err), nil
@@ -123,6 +137,20 @@ func (m *Manager) handleExecutorExecuteStream(request []byte) ([]byte, error) {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), turnBudget(turn.cfg))
+
+	if turn.searchMode {
+		// Streaming search is buffered (the whole run completes inside
+		// Handle, as tool turns are) and emits role/content, terminal,
+		// [DONE] once.
+		result, apiErr := m.runSearchTurn(ctx, turn, req.HostCallbackID)
+		if apiErr != nil {
+			cancel()
+			return errEnvelope(apiErr), nil
+		}
+		m.emitSearchStream(req.StreamID, turn, result, cancel)
+		return ok(map[string]any{}), nil
+	}
+
 	ch, err := m.runTextTurnStart(ctx, turn, req.HostCallbackID)
 	if err != nil {
 		cancel()
@@ -296,6 +324,13 @@ func isInvalidTokenError(err error) bool {
 	var sentinelErr *upstream.SentinelError
 	if errors.As(err, &sentinelErr) {
 		return sentinelErr.HTTPStatus == http.StatusUnauthorized
+	}
+	// The search route folds its legs' 401s into a SearchError (toSearchError);
+	// match it the same way so the refresh-retry loop fires on a search
+	// prepare/SSE/poll 401, not only on the sentinel leg.
+	var searchErr *upstream.SearchError
+	if errors.As(err, &searchErr) {
+		return searchErr.Code == "invalid_token" || searchErr.HTTPStatus == http.StatusUnauthorized
 	}
 	return false
 }

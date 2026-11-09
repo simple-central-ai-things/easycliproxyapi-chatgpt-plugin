@@ -249,7 +249,7 @@ func flattenClaudeContent(content any) string {
 // to user, the reference's message.get("role", "user"). The claude
 // request carries no thinking-effort spelling (the reference reads none),
 // so the config default applies at the turn.
-func shapeClaudeRequest(body []byte) ([]upstream.ConversationMessage, bool, *pluginabi.Error) {
+func shapeClaudeRequest(body []byte, searchMode bool) ([]upstream.ConversationMessage, bool, *pluginabi.Error) {
 	if len(body) == 0 {
 		return nil, false, typedErr("invalid_request", "empty claude payload", 400)
 	}
@@ -258,9 +258,17 @@ func shapeClaudeRequest(body []byte) ([]upstream.ConversationMessage, bool, *plu
 		return nil, false, typedErr("invalid_request", "the claude payload is not valid JSON", 400)
 	}
 
-	prompt, toolMode, err := shapeTools(payload.Tools)
-	if err != nil {
-		return nil, false, err
+	// In search mode the tools are the search request itself (the gate
+	// verified no function tool is mixed in) and are skipped, as in the
+	// chat and Responses formats.
+	var prompt string
+	var toolMode bool
+	if !searchMode {
+		var err *pluginabi.Error
+		prompt, toolMode, err = shapeTools(payload.Tools)
+		if err != nil {
+			return nil, false, err
+		}
 	}
 
 	if len(payload.Messages) == 0 {
@@ -325,12 +333,34 @@ func (m *Manager) prepareClaudeTextTurn(req executorRequest) (*textTurn, *plugin
 	if len(body) == 0 {
 		body = req.OriginalRequest
 	}
-	messages, toolMode, shapeErr := shapeClaudeRequest(body)
+
+	// Web-search detection mirrors the chat format. The claude request
+	// carries no web_search tools (Anthropic tools have no "type"), so this
+	// fires only on a search model prefix.
+	searchMode := isWebSearchRequest(body, slug)
+
+	messages, toolMode, shapeErr := shapeClaudeRequest(body, searchMode)
 	if shapeErr != nil {
 		return nil, shapeErr
 	}
 	turn.messages = messages
 	turn.toolMode = toolMode
+
+	u, err := upstream.NewUpstream(cfg, m.host)
+	if err != nil {
+		return nil, typedErr("upstream_error", "upstream transport unavailable: "+err.Error(), 500)
+	}
+	turn.upstream = u
+
+	if searchMode {
+		// The search flow posts its own bodies; the cited answer renders
+		// into the normal claude message envelope.
+		if apiErr := prepareSearchTurn(turn, messages); apiErr != nil {
+			return nil, apiErr
+		}
+		return turn, nil
+	}
+
 	// The claude request carries no thinking-effort spelling: the config
 	// default applies at the turn (auto → omitted upstream).
 	effort := cfg.ThinkingEffort
@@ -347,11 +377,6 @@ func (m *Manager) prepareClaudeTextTurn(req executorRequest) (*textTurn, *plugin
 	}
 	turn.payload = payload
 
-	u, err := upstream.NewUpstream(cfg, m.host)
-	if err != nil {
-		return nil, typedErr("upstream_error", "upstream transport unavailable: "+err.Error(), 500)
-	}
-	turn.upstream = u
 	return turn, nil
 }
 
@@ -367,6 +392,18 @@ func (m *Manager) executeClaude(req executorRequest) ([]byte, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), turnBudget(turn.cfg))
 	defer cancel()
+
+	if turn.searchMode {
+		result, apiErr := m.runSearchTurn(ctx, turn, req.HostCallbackID)
+		if apiErr != nil {
+			return errEnvelope(apiErr), nil
+		}
+		cited, _, apiErr := searchCitedAnswer(result)
+		if apiErr != nil {
+			return errEnvelope(apiErr), nil
+		}
+		return ok(pluginapi.ExecutorResponse{Payload: claudeMessagePayload(turn, cited)}), nil
+	}
 
 	ch, err := m.runTextTurnStart(ctx, turn, req.HostCallbackID)
 	if err != nil {
@@ -390,6 +427,26 @@ func (m *Manager) executeClaudeStream(req executorRequest) ([]byte, error) {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), turnBudget(turn.cfg))
+
+	if turn.searchMode {
+		// Streaming search is buffered (the whole run completes inside
+		// Handle, as every claude turn does) and emits the sequence once.
+		result, apiErr := m.runSearchTurn(ctx, turn, req.HostCallbackID)
+		if apiErr != nil {
+			cancel()
+			m.closeClaudeStreamOnce(req.StreamID, envelopeText(apiErr), cancel)
+			return ok(map[string]any{}), nil
+		}
+		cited, _, apiErr := searchCitedAnswer(result)
+		if apiErr != nil {
+			cancel()
+			m.closeClaudeStreamOnce(req.StreamID, envelopeText(apiErr), cancel)
+			return ok(map[string]any{}), nil
+		}
+		m.emitClaudeSearchStream(req.StreamID, turn, cited, cancel)
+		return ok(map[string]any{}), nil
+	}
+
 	ch, err := m.runTextTurnStart(ctx, turn, req.HostCallbackID)
 	if err != nil {
 		cancel()
@@ -398,6 +455,16 @@ func (m *Manager) executeClaudeStream(req executorRequest) ([]byte, error) {
 
 	m.emitClaudeStream(req.StreamID, ch, turn, cancel)
 	return ok(map[string]any{}), nil
+}
+
+// closeClaudeStreamOnce closes the downstream stream exactly once carrying
+// the typed error text (the text executor's closeStream convention).
+func (m *Manager) closeClaudeStreamOnce(downstreamID, msg string, cancelBudget context.CancelFunc) {
+	var closeOnce sync.Once
+	closeOnce.Do(func() {
+		cancelBudget()
+		_, _ = m.host.Call(pluginabi.MethodHostStreamClose, streamCloseWire(downstreamID, msg))
+	})
 }
 
 // ---------------------------------------------------------------------------

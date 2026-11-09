@@ -128,7 +128,7 @@ func TestClaudeMessagesMapping(t *testing.T) {
 				map[string]any{"name": "get_weather", "description": "Weather", "input_schema": map[string]any{"type": "object"}},
 			},
 		})
-		messages, toolMode, apiErr := shapeClaudeRequest(body)
+		messages, toolMode, apiErr := shapeClaudeRequest(body, false)
 		if apiErr != nil {
 			t.Fatalf("shapeClaudeRequest: %+v", apiErr)
 		}
@@ -167,7 +167,7 @@ func TestClaudeMessagesMapping(t *testing.T) {
 				},
 			},
 		})
-		messages, toolMode, apiErr := shapeClaudeRequest(body)
+		messages, toolMode, apiErr := shapeClaudeRequest(body, false)
 		if apiErr != nil {
 			t.Fatalf("shapeClaudeRequest: %+v", apiErr)
 		}
@@ -206,7 +206,7 @@ func TestClaudeMessagesMapping(t *testing.T) {
 				},
 			},
 		})
-		messages, _, apiErr := shapeClaudeRequest(body)
+		messages, _, apiErr := shapeClaudeRequest(body, false)
 		if apiErr != nil {
 			t.Fatalf("shapeClaudeRequest: %+v", apiErr)
 		}
@@ -226,7 +226,7 @@ func TestClaudeMessagesMapping(t *testing.T) {
 				map[string]any{"name": "get_weather", "description": "Weather", "input_schema": map[string]any{"type": "object"}},
 			},
 		})
-		messages, toolMode, apiErr := shapeClaudeRequest(body)
+		messages, toolMode, apiErr := shapeClaudeRequest(body, false)
 		if apiErr != nil || !toolMode {
 			t.Fatalf("apiErr = %+v toolMode = %v, want the emulated tool mode", apiErr, toolMode)
 		}
@@ -243,7 +243,7 @@ func TestClaudeMessagesMapping(t *testing.T) {
 			"system":   "You are Claude Code.",
 			"messages": []any{map[string]any{"role": "user", "content": "hi"}},
 		})
-		messages, toolMode, apiErr := shapeClaudeRequest(body)
+		messages, toolMode, apiErr := shapeClaudeRequest(body, false)
 		if apiErr != nil {
 			t.Fatalf("shapeClaudeRequest: %+v", apiErr)
 		}
@@ -259,13 +259,13 @@ func TestClaudeMessagesMapping(t *testing.T) {
 		_, _, apiErr := shapeClaudeRequest(responsesJSON(t, map[string]any{
 			"messages": []any{map[string]any{"role": "user", "content": "hi"}},
 			"tools":    []any{map[string]any{"type": "web_search_20250305"}},
-		}))
+		}), false)
 		if apiErr == nil || apiErr.Code != "tools_unsupported" || apiErr.HTTPStatus != http.StatusBadRequest {
 			t.Fatalf("apiErr = %+v, want typed 400 tools_unsupported", apiErr)
 		}
 		_, _, apiErr = shapeClaudeRequest(responsesJSON(t, map[string]any{
 			"system": "hi",
-		}))
+		}), false)
 		if apiErr == nil || apiErr.Code != "invalid_request" || apiErr.HTTPStatus != http.StatusBadRequest {
 			t.Fatalf("apiErr = %+v, want typed 400 invalid_request for the missing messages", apiErr)
 		}

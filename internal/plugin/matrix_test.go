@@ -12,6 +12,7 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -272,18 +273,21 @@ func TestDocumentedConfigMatrixMatchesParseConfig(t *testing.T) {
 		t.Fatalf("ParseConfig(defaults): %v", err)
 	}
 	expected := map[string]string{
-		"model-prefix":             fmt.Sprintf("%q", cfg.ModelPrefix),
-		"image-model-name":         fmt.Sprintf("%q", cfg.ImageModelName),
-		"codex-image-model-name":   fmt.Sprintf("%q", cfg.CodexImageModelName),
-		"drawing-upstream-model":   fmt.Sprintf("%q", cfg.DrawingUpstreamModel),
-		"thinking-effort":          fmt.Sprintf("%q", cfg.ThinkingEffort),
-		"base-url":                 fmt.Sprintf("%q", cfg.BaseURL),
-		"message-as-error":         strconv.FormatBool(cfg.MessageAsError),
-		"image-poll-timeout-secs":  strconv.Itoa(cfg.ImagePollTimeoutSecs),
-		"image-poll-interval-secs": strconv.Itoa(cfg.ImagePollIntervalSecs),
-		"request-timeout-secs":     strconv.Itoa(cfg.RequestTimeoutSecs),
-		"tls-mode":                 fmt.Sprintf("%q", cfg.TLSMode),
-		"retry-401-refresh":        strconv.FormatBool(cfg.Retry401Refresh),
+		"model-prefix":              fmt.Sprintf("%q", cfg.ModelPrefix),
+		"image-model-name":          fmt.Sprintf("%q", cfg.ImageModelName),
+		"codex-image-model-name":    fmt.Sprintf("%q", cfg.CodexImageModelName),
+		"drawing-upstream-model":    fmt.Sprintf("%q", cfg.DrawingUpstreamModel),
+		"thinking-effort":           fmt.Sprintf("%q", cfg.ThinkingEffort),
+		"base-url":                  fmt.Sprintf("%q", cfg.BaseURL),
+		"message-as-error":          strconv.FormatBool(cfg.MessageAsError),
+		"image-poll-timeout-secs":   strconv.Itoa(cfg.ImagePollTimeoutSecs),
+		"image-poll-interval-secs":  strconv.Itoa(cfg.ImagePollIntervalSecs),
+		"request-timeout-secs":      strconv.Itoa(cfg.RequestTimeoutSecs),
+		"tls-mode":                  fmt.Sprintf("%q", cfg.TLSMode),
+		"retry-401-refresh":         strconv.FormatBool(cfg.Retry401Refresh),
+		"search-upstream-model":     fmt.Sprintf("%q", cfg.SearchUpstreamModel),
+		"search-timeout-secs":       strconv.Itoa(cfg.SearchTimeoutSecs),
+		"search-poll-interval-secs": strconv.Itoa(cfg.SearchPollIntervalSecs),
 	}
 	seen := map[string]bool{}
 	for _, row := range readMatrix(t, "config") {
@@ -397,6 +401,16 @@ func TestDocumentedErrorMatrixMatchesDispatch(t *testing.T) {
 				return contentPolicyViolation()
 			case "no_assistant_content":
 				return noAssistantContent()
+			case "search_poll_timeout":
+				return mapSearchError(&upstream.SearchError{
+					Code: upstream.SearchCodePollTimeout, HTTPStatus: http.StatusGatewayTimeout,
+					Retryable: true, Message: "timed out waiting for the search result",
+				})
+			case "search_response_malformed":
+				return mapSearchError(&upstream.SearchError{
+					Code: upstream.SearchCodeMalformed, HTTPStatus: http.StatusBadGateway,
+					Message: "the upstream search response is malformed",
+				})
 			default:
 				t.Fatalf("matrix pin %q has no error-map fixture", code)
 			}

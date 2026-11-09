@@ -453,13 +453,13 @@ func TestToolResultRoundTrip(t *testing.T) {
 // ---------------------------------------------------------------------------
 // TestToolsRefusedWhenNoName — a tools array where no tool carries a usable
 // function name keeps the honest typed 400 tools_unsupported refusal BEFORE
-// any upstream call.
+// any upstream call. A web_search(_preview…) tools array is NOT refused here:
+// it routes through the search flow (executor_search_test.go).
 // ---------------------------------------------------------------------------
 
 func TestToolsRefusedWhenNoName(t *testing.T) {
 	for name, tools := range map[string]any{
 		"function without name": []any{map[string]any{"type": "function"}},
-		"built-in tool only":    []any{map[string]any{"type": "web_search_preview"}},
 		"no tool has a name":    []any{map[string]any{"type": "function"}, map[string]any{"name": ""}},
 		"tools is not an array": map[string]any{"name": "get_weather"},
 	} {

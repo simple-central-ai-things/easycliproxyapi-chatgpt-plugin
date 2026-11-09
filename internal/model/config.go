@@ -24,6 +24,13 @@ const (
 	defaultRequestTimeout    = 600
 	defaultTLSMode           = "stdlib"
 	tlsModeUtls              = "utls"
+
+	// The oracle's search-flow constants (SEARCH_MODEL / SEARCH_TIMEOUT_SECS /
+	// SEARCH_POLL_INTERVAL_SECS), surfaced as config so the poll budget is
+	// tunable per deployment (and shrinkable to seconds in offline tests).
+	defaultSearchUpstream = "gpt-5-5"
+	defaultSearchTimeout  = 300
+	defaultSearchInterval = 3
 )
 
 // Config is the validated plugin configuration. BaseURL is accepted but
@@ -46,6 +53,10 @@ type Config struct {
 	RequestTimeoutSecs    int
 	TLSMode               string
 	Retry401Refresh       bool
+
+	SearchUpstreamModel    string
+	SearchTimeoutSecs      int
+	SearchPollIntervalSecs int
 }
 
 // rawConfig mirrors the YAML shape. Pointer fields distinguish "unset" (apply
@@ -72,6 +83,10 @@ type rawConfig struct {
 	RequestTimeoutSecs    *int    `yaml:"request-timeout-secs"`
 	TLSMode               *string `yaml:"tls-mode"`
 	Retry401Refresh       *bool   `yaml:"retry-401-refresh"`
+
+	SearchUpstreamModel    *string `yaml:"search-upstream-model"`
+	SearchTimeoutSecs      *int    `yaml:"search-timeout-secs"`
+	SearchPollIntervalSecs *int    `yaml:"search-poll-interval-secs"`
 }
 
 // ParseConfig decodes the host-supplied config YAML, applies defaults and
@@ -100,6 +115,10 @@ func ParseConfig(rawYAML []byte) (Config, error) {
 		RequestTimeoutSecs:    orDefault(raw.RequestTimeoutSecs, defaultRequestTimeout),
 		TLSMode:               orDefault(raw.TLSMode, defaultTLSMode),
 		Retry401Refresh:       orDefault(raw.Retry401Refresh, true),
+
+		SearchUpstreamModel:    orDefault(raw.SearchUpstreamModel, defaultSearchUpstream),
+		SearchTimeoutSecs:      orDefault(raw.SearchTimeoutSecs, defaultSearchTimeout),
+		SearchPollIntervalSecs: orDefault(raw.SearchPollIntervalSecs, defaultSearchInterval),
 	}
 	if err := c.validate(); err != nil {
 		return Config{}, err
@@ -125,6 +144,15 @@ func (c Config) validate() error {
 	}
 	if c.ImagePollIntervalSecs > c.ImagePollTimeoutSecs {
 		return fmt.Errorf("image-poll-interval-secs: must not exceed image-poll-timeout-secs")
+	}
+	if c.SearchTimeoutSecs <= 0 {
+		return fmt.Errorf("search-timeout-secs: must be positive")
+	}
+	if c.SearchPollIntervalSecs <= 0 {
+		return fmt.Errorf("search-poll-interval-secs: must be positive")
+	}
+	if c.SearchPollIntervalSecs > c.SearchTimeoutSecs {
+		return fmt.Errorf("search-poll-interval-secs: must not exceed search-timeout-secs")
 	}
 	return nil
 }

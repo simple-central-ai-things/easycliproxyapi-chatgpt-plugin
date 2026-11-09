@@ -178,7 +178,7 @@ func decodeResponsesPayload(body []byte) (responsesShapePayload, *pluginabi.Erro
 // loop and reasoning items are skipped (the upstream carries no reasoning
 // history). Image content parts are refused typed on the text path — they
 // route the request to the image pipeline via the image_generation tool.
-func shapeResponseRequest(body []byte) ([]upstream.ConversationMessage, string, bool, *pluginabi.Error) {
+func shapeResponseRequest(body []byte, searchMode bool) ([]upstream.ConversationMessage, string, bool, *pluginabi.Error) {
 	payload, apiErr := decodeResponsesPayload(body)
 	if apiErr != nil {
 		return nil, "", false, apiErr
@@ -187,10 +187,17 @@ func shapeResponseRequest(body []byte) ([]upstream.ConversationMessage, string, 
 	// The tools refusal (no usable name / non-array) precedes every other
 	// work and costs zero network. The image_generation tool never reaches
 	// the text path — dispatch routes it first — so shapeTools' nameless
-	// refusal doubles as the built-in-tools (web_search etc.) refusal.
-	prompt, toolMode, err := shapeTools(payload.Tools)
-	if err != nil {
-		return nil, "", false, err
+	// refusal doubles as the built-in-tools (web_search etc.) refusal. In
+	// search mode the web_search tools ARE the request (the gate verified
+	// no function tool is mixed in) and are skipped like the chat format.
+	var prompt string
+	var toolMode bool
+	if !searchMode {
+		var err *pluginabi.Error
+		prompt, toolMode, err = shapeTools(payload.Tools)
+		if err != nil {
+			return nil, "", false, err
+		}
 	}
 
 	messages, apiErr := messagesFromResponsesInput(payload.Input, payload.Instructions)
@@ -745,6 +752,22 @@ func (m *Manager) executeResponses(req executorRequest) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), turnBudget(turn.cfg))
 	defer cancel()
 
+	if turn.searchMode {
+		result, apiErr := m.runSearchTurn(ctx, turn, req.HostCallbackID)
+		if apiErr != nil {
+			return errEnvelope(apiErr), nil
+		}
+		cited, _, apiErr := searchCitedAnswer(result)
+		if apiErr != nil {
+			return errEnvelope(apiErr), nil
+		}
+		envelope := responseObject(turn.turnID, turn.modelID, turn.created, "completed",
+			responseTextItems(turn, cited),
+			responsesUsage(turn.promptTokens, 0, estimateTokens(cited), 0))
+		raw, _ := json.Marshal(envelope)
+		return ok(pluginapi.ExecutorResponse{Payload: raw}), nil
+	}
+
 	ch, err := m.runTextTurnStart(ctx, turn, req.HostCallbackID)
 	if err != nil {
 		return errEnvelope(err), nil
@@ -783,6 +806,26 @@ func (m *Manager) executeResponsesStream(req executorRequest) ([]byte, error) {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), turnBudget(turn.cfg))
+
+	if turn.searchMode {
+		// Streaming search is buffered (the whole run completes inside
+		// Handle, as tool turns are) and emits the item sequence once.
+		result, apiErr := m.runSearchTurn(ctx, turn, req.HostCallbackID)
+		if apiErr != nil {
+			cancel()
+			m.closeResponsesStreamOnce(req.StreamID, envelopeText(apiErr), cancel)
+			return ok(map[string]any{}), nil
+		}
+		cited, _, apiErr := searchCitedAnswer(result)
+		if apiErr != nil {
+			cancel()
+			m.closeResponsesStreamOnce(req.StreamID, envelopeText(apiErr), cancel)
+			return ok(map[string]any{}), nil
+		}
+		m.emitResponsesSearchStream(req.StreamID, turn, cited, cancel)
+		return ok(map[string]any{}), nil
+	}
+
 	ch, err := m.runTextTurnStart(ctx, turn, req.HostCallbackID)
 	if err != nil {
 		cancel()
@@ -798,6 +841,16 @@ func (m *Manager) executeResponsesStream(req executorRequest) ([]byte, error) {
 	}
 	go m.pumpResponseStream(req.StreamID, ch, turn, cancel)
 	return ok(map[string]any{}), nil
+}
+
+// closeResponsesStreamOnce closes the downstream stream exactly once carrying
+// the typed error text (the text executor's closeStream convention).
+func (m *Manager) closeResponsesStreamOnce(downstreamID, msg string, cancelBudget context.CancelFunc) {
+	var closeOnce sync.Once
+	closeOnce.Do(func() {
+		cancelBudget()
+		_, _ = m.host.Call(pluginabi.MethodHostStreamClose, streamCloseWire(downstreamID, msg))
+	})
 }
 
 // prepareResponseTextTurn shapes one Responses text turn: the chat format's
@@ -836,12 +889,34 @@ func (m *Manager) prepareResponseTextTurn(req executorRequest) (*textTurn, *plug
 	if len(body) == 0 {
 		body = req.OriginalRequest
 	}
-	messages, effort, toolMode, shapeErr := shapeResponseRequest(body)
+
+	// Web-search detection mirrors the chat format (the Responses request
+	// carries web_search tools under the same "tools" field); it runs
+	// before the tools refusal.
+	searchMode := isWebSearchRequest(body, slug)
+
+	messages, effort, toolMode, shapeErr := shapeResponseRequest(body, searchMode)
 	if shapeErr != nil {
 		return nil, shapeErr
 	}
 	turn.messages = messages
 	turn.toolMode = toolMode
+
+	u, err := upstream.NewUpstream(cfg, m.host)
+	if err != nil {
+		return nil, typedErr("upstream_error", "upstream transport unavailable: "+err.Error(), 500)
+	}
+	turn.upstream = u
+
+	if searchMode {
+		// The search flow posts its own bodies; the cited answer renders
+		// into the normal Responses envelope.
+		if apiErr := prepareSearchTurn(turn, messages); apiErr != nil {
+			return nil, apiErr
+		}
+		return turn, nil
+	}
+
 	if effort == "" {
 		// The config default applies when the request carries no thinking
 		// effort spelling (auto/none → omitted upstream).
@@ -860,11 +935,6 @@ func (m *Manager) prepareResponseTextTurn(req executorRequest) (*textTurn, *plug
 	}
 	turn.payload = payload
 
-	u, err := upstream.NewUpstream(cfg, m.host)
-	if err != nil {
-		return nil, typedErr("upstream_error", "upstream transport unavailable: "+err.Error(), 500)
-	}
-	turn.upstream = u
 	return turn, nil
 }
 

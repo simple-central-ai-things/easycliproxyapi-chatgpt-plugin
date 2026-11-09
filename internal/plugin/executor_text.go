@@ -53,6 +53,13 @@ type textTurn struct {
 	// the reply text is parsed for the reference's tool-call XML and the
 	// stream is buffered (tool requests are not token-streamed).
 	toolMode bool
+	// searchMode is true when the request asked for web search (a
+	// web_search tool with no other tools, a web_search tool_choice, a
+	// web_search_options block, or a search model prefix): the turn runs
+	// upstream.Search instead of the conversation pipeline, and searchQuery
+	// is the last user message text it posts.
+	searchMode  bool
+	searchQuery string
 }
 
 // prepareTextTurn decodes the credential, resolves the model, shapes the
@@ -93,12 +100,35 @@ func (m *Manager) prepareTextTurn(req executorRequest) (*textTurn, *pluginabi.Er
 	if len(body) == 0 {
 		body = req.OriginalRequest
 	}
-	messages, effort, toolMode, shapeErr := shapeChatRequest(body)
+
+	// Web-search detection runs BEFORE the tools refusal: a search request
+	// carries nameless web_search tools that the ordinary pipeline would
+	// refuse typed (oracle is_web_search_chat_request gate).
+	searchMode := isWebSearchRequest(body, slug)
+
+	messages, effort, toolMode, shapeErr := shapeChatRequest(body, searchMode)
 	if shapeErr != nil {
 		return nil, shapeErr
 	}
 	turn.messages = messages
 	turn.toolMode = toolMode
+
+	u, err := upstream.NewUpstream(cfg, m.host)
+	if err != nil {
+		return nil, typedErr("upstream_error", "upstream transport unavailable: "+err.Error(), 500)
+	}
+	turn.upstream = u
+
+	if searchMode {
+		// The search flow posts its own bodies (oracle search prepare +
+		// f/conversation with force_use_search); no conversation payload,
+		// no thinking-effort mapping. The query is the last user message.
+		if apiErr := prepareSearchTurn(turn, messages); apiErr != nil {
+			return nil, apiErr
+		}
+		return turn, nil
+	}
+
 	if effort == "" {
 		// The config default applies when the request carries no
 		// thinking_effort / reasoning_effort (auto → omitted upstream).
@@ -117,11 +147,6 @@ func (m *Manager) prepareTextTurn(req executorRequest) (*textTurn, *pluginabi.Er
 	}
 	turn.payload = payload
 
-	u, err := upstream.NewUpstream(cfg, m.host)
-	if err != nil {
-		return nil, typedErr("upstream_error", "upstream transport unavailable: "+err.Error(), 500)
-	}
-	turn.upstream = u
 	return turn, nil
 }
 
@@ -167,7 +192,7 @@ type shapeChatPayload struct {
 // {content}"); a prior assistant tool_calls message folds back into the
 // reference's tool_use XML text blocks so the upstream sees the calls it
 // (we) already made.
-func shapeChatRequest(body []byte) ([]upstream.ConversationMessage, string, bool, *pluginabi.Error) {
+func shapeChatRequest(body []byte, searchMode bool) ([]upstream.ConversationMessage, string, bool, *pluginabi.Error) {
 	if len(body) == 0 {
 		return nil, "", false, typedErr("invalid_request", "empty chat payload", 400)
 	}
@@ -177,10 +202,17 @@ func shapeChatRequest(body []byte) ([]upstream.ConversationMessage, string, bool
 	}
 
 	// The tools refusal (no usable name / non-array) precedes every other
-	// work and costs zero network.
-	prompt, toolMode, err := shapeTools(payload.Tools)
-	if err != nil {
-		return nil, "", false, err
+	// work and costs zero network. In search mode the tools are the search
+	// request itself (the gate already verified no function tool is mixed
+	// in), so they are skipped — the search flow posts none upstream.
+	var prompt string
+	var toolMode bool
+	if !searchMode {
+		var err *pluginabi.Error
+		prompt, toolMode, err = shapeTools(payload.Tools)
+		if err != nil {
+			return nil, "", false, err
+		}
 	}
 
 	if len(payload.Messages) == 0 {

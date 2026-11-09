@@ -82,6 +82,7 @@ type imageTurn struct {
 	cred         Credential
 	upstream     upstream.Upstream
 	route        imageRoute
+	modelID      string // the requested published id (openai-response envelope echo)
 	prompt       string
 	size         string
 	quality      string
@@ -191,6 +192,7 @@ func (m *Manager) prepareImageTurn(req executorRequest) (*imageTurn, *pluginabi.
 		cred:         cred,
 		upstream:     u,
 		route:        route,
+		modelID:      req.Model,
 		prompt:       parsed.prompt,
 		size:         parsed.size,
 		quality:      parsed.quality,

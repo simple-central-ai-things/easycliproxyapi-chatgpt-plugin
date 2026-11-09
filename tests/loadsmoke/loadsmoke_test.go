@@ -138,8 +138,8 @@ func TestLoadDryRunRealPluginArtifact(t *testing.T) {
 	if registration.Capabilities.ExecutorModelScope != "oauth" {
 		t.Fatalf("executor_model_scope = %q, want oauth", registration.Capabilities.ExecutorModelScope)
 	}
-	if strings.Join(registration.Capabilities.InputFormats, ",") != "openai,openai-image" ||
-		strings.Join(registration.Capabilities.OutputFormats, ",") != "openai,openai-image" {
+	if strings.Join(registration.Capabilities.InputFormats, ",") != "openai,openai-image,openai-response" ||
+		strings.Join(registration.Capabilities.OutputFormats, ",") != "openai,openai-image,openai-response" {
 		t.Fatalf("executor formats in=%v out=%v", registration.Capabilities.InputFormats, registration.Capabilities.OutputFormats)
 	}
 

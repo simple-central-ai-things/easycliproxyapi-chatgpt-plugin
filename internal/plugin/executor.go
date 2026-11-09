@@ -6,7 +6,9 @@ package plugin
 // (Review Focus #3) and the typed upstream-failure → envelope mapping
 // (the error-class table pinned by the plan). The OpenAI text format lives in
 // executor_text.go; the openai-image format (the host's /v1/images/generations
-// and /v1/images/edits, arriving untranslated) lives in executor_image.go.
+// and /v1/images/edits, arriving untranslated) lives in executor_image.go;
+// the openai-response format (the host's /v1/responses, arriving untranslated)
+// lives in executor_responses.go.
 //
 // The 401 contract: when the turn START (sentinel handshake or the
 // conversation stream start) fails with a typed invalid_token, the executor
@@ -64,6 +66,9 @@ func (m *Manager) handleExecutorExecute(request []byte) ([]byte, error) {
 	if isImageRequest(req) {
 		return m.executeImage(req)
 	}
+	if isResponseRequest(req) {
+		return m.executeResponses(req)
+	}
 	turn, err := m.prepareTextTurn(req)
 	if err != nil {
 		return errEnvelope(err), nil
@@ -100,6 +105,9 @@ func (m *Manager) handleExecutorExecuteStream(request []byte) ([]byte, error) {
 	}
 	if isImageRequest(req) {
 		return m.executeImageStream(req)
+	}
+	if isResponseRequest(req) {
+		return m.executeResponsesStream(req)
 	}
 	turn, err := m.prepareTextTurn(req)
 	if err != nil {
@@ -139,8 +147,10 @@ func decodeExecutorRequest(request []byte) (executorRequest, *pluginabi.Error) {
 	if req.AuthProvider != "" && req.AuthProvider != providerKey {
 		return req, typedErr("invalid_credential", "wrong provider credential", 401)
 	}
-	if req.Format != "" && req.Format != "openai" && req.Format != "openai-image" {
-		return req, typedErr("unsupported_protocol", "requires the openai or openai-image executor format", 400)
+	if req.Format != "" && req.Format != "openai" && req.Format != "openai-image" &&
+		req.Format != responseFormat {
+		return req, typedErr("unsupported_protocol",
+			"requires the openai, openai-image or openai-response executor format", 400)
 	}
 	return req, nil
 }

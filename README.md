@@ -94,7 +94,7 @@ the code.
 | --- | --- | --- | --- |
 | `auth_provider` | yes | — | — |
 | `model_provider` | yes | — | — |
-| `executor` | yes | `oauth` | `openai`, `openai-image` |
+| `executor` | yes | `oauth` | `openai`, `openai-image`, `openai-response` |
 | `quota_provider` | yes | — | — |
 <!-- /matrix:capabilities -->
 
@@ -192,6 +192,32 @@ the code.
   refresh token, so an unpersisted refresh would break the host's next
   scheduled `auth.refresh`); a failed refresh, a failed save, or a second
   `401` ends in typed `401 invalid_token`.
+- Executor surface (Responses, `openai-response` format): the host's
+  `/v1/responses` requests arrive untranslated and reuse the SAME upstream
+  conversation pipeline as the `openai` format — only the inbound decode
+  (`instructions` → leading system message, `input` string/item-list →
+  conversation messages: `function_call` / `function_call_output` items
+  fold like the agent loop, `reasoning` items are skipped, image content
+  parts are refused typed on the text path) and the outbound shaping
+  differ. Non-stream answers carry the `response.completed` envelope
+  object (`resp_<uuid hex>` id, `output` message items with
+  `output_text` parts, usage in the reference's `input_tokens` /
+  `output_tokens` / `*_tokens_details` shape). Stream emits the Responses
+  SSE sequence — `response.created` → `response.output_item.added` →
+  `response.output_text.delta`* → `response.output_text.done` →
+  `response.output_item.done` → `response.completed` (with usage) — and
+  NO `data: [DONE]` sentinel; `response.completed` is the terminator.
+  An `image_generation` tool routes the request to the image pipeline
+  (prompt from `input_text` parts and user messages, the LAST input image
+  as reference, the tool's `size` / `quality` riding through, a published
+  text model on the drawing route) and answers with `ig_<n>`
+  `image_generation_call` output items carrying the base64 `result`; a
+  missing prompt is typed `400 invalid_request` ("input text is required")
+  before any upstream call. Function tools reuse the `openai` format's XML
+  emulation and parse into `function_call` output items; any other tool
+  type (e.g. `web_search_preview`) keeps the typed `400 tools_unsupported`
+  refusal. Tool and image requests buffer the whole turn before emitting
+  the item sequence (documented tradeoff, as with `openai` streaming).
 - Error classes (pinned one-directionally by `matrix_test.go` — each
   documented row against the dispatcher; "dispatch" pins drive the
   registered Manager offline against a fake host, "error-map" pins drive

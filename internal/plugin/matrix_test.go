@@ -111,7 +111,7 @@ func TestReadmeIdentityAndRegistryPins(t *testing.T) {
 	for _, want := range []string{
 		providerKey, pluginID, pluginVersion,
 		"`auth_provider`", "`model_provider`", "`executor`", "`quota_provider`",
-		"`openai`", "`openai-image`",
+		"`openai`", "`openai-image`", "`openai-response`",
 		"bytes / 4",         // token usage is a documented estimate, never exact
 		"b64_json",          // image responses are always served inline
 		"byte-identical",    // wire-format fidelity to the reference

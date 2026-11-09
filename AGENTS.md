@@ -79,6 +79,11 @@ internal/plugin/
                               folds and the buffered tool stream
   executor_image.go           the openai-image turn (route by base name,
                               generations/edits payload, inline b64_json)
+  executor_responses.go       the openai-response (Responses API) turn:
+                              input/instructions decode, response.completed
+                              envelope + SSE event sequence, the
+                              image_generation tool route onto the image
+                              pipeline, function tools via the XML emulation
   matrix_test.go              pins the README contract matrices to the
                               dispatcher / registration / ParseConfig
   *_test.go                   offline unit tests against a fake caller
@@ -115,7 +120,7 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   (the host `validPlugin` gate rejects an empty value).
 - Registration capabilities (exact surface): `auth_provider`,
   `model_provider`, `executor` (model scope `oauth`, formats `openai` +
-  `openai-image` in and out), `quota_provider`.
+  `openai-image` + `openai-response` in and out), `quota_provider`.
 - Provider identifiers: `auth.identifier`, `executor.identifier` and
   `quota.identifier` all return `{identifier:"chatgpt-proxy"}`.
 - Host config block (EasyCLI `config.yaml`):

@@ -34,14 +34,16 @@ var sseHardCapFor = func(cfg Config) time.Duration {
 // pump share. text is assembled incrementally by the pump for the
 // terminal usage estimate; it never crosses the ABI.
 type textTurn struct {
-	cfg          Config
-	cred         Credential
-	upstream     upstream.Upstream
-	payload      map[string]any // the built upstream conversation body
-	messages     []upstream.ConversationMessage
-	hardCap      time.Duration
-	modelID      string // the requested published id, echoed in every frame
-	turnID       string // one chatcmpl-<uuid> per turn (all frames share it)
+	cfg      Config
+	cred     Credential
+	upstream upstream.Upstream
+	payload  map[string]any // the built upstream conversation body
+	messages []upstream.ConversationMessage
+	hardCap  time.Duration
+	modelID  string // the requested published id, echoed in every frame
+	turnID   string // one turn id per turn, shared by every frame:
+	// chatcmpl-<uuid> (openai) or resp_<uuid hex> (openai-response)
+	created      int64  // the response envelope's created_at (openai-response only)
 	promptTokens int    // documented estimate over the request messages
 	text         string // assembled assistant text (pump only)
 	// authFileName is the record's auth file name (host-selected AuthID or

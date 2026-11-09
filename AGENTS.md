@@ -84,6 +84,13 @@ internal/plugin/
                               envelope + SSE event sequence, the
                               image_generation tool route onto the image
                               pipeline, function tools via the XML emulation
+  executor_claude.go          the claude (Anthropic Messages) turn:
+                              system/messages block-flatten decode
+                              (tool_use/tool_result → text, Claude Code XML
+                              rule swap), the message envelope + Anthropic
+                              SSE event sequence (event:/data: framing, no
+                              [DONE]), tools via the same XML emulation,
+                              host-rendered Anthropic error envelopes
   matrix_test.go              pins the README contract matrices to the
                               dispatcher / registration / ParseConfig
   *_test.go                   offline unit tests against a fake caller
@@ -120,7 +127,7 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   (the host `validPlugin` gate rejects an empty value).
 - Registration capabilities (exact surface): `auth_provider`,
   `model_provider`, `executor` (model scope `oauth`, formats `openai` +
-  `openai-image` + `openai-response` in and out), `quota_provider`.
+  `openai-image` + `openai-response` + `claude` in and out), `quota_provider`.
 - Provider identifiers: `auth.identifier`, `executor.identifier` and
   `quota.identifier` all return `{identifier:"chatgpt-proxy"}`.
 - Host config block (EasyCLI `config.yaml`):

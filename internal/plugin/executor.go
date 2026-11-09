@@ -8,7 +8,9 @@ package plugin
 // executor_text.go; the openai-image format (the host's /v1/images/generations
 // and /v1/images/edits, arriving untranslated) lives in executor_image.go;
 // the openai-response format (the host's /v1/responses, arriving untranslated)
-// lives in executor_responses.go.
+// lives in executor_responses.go; the claude (Anthropic Messages) format
+// (the host's /v1/messages, arriving untranslated) lives in
+// executor_claude.go.
 //
 // The 401 contract: when the turn START (sentinel handshake or the
 // conversation stream start) fails with a typed invalid_token, the executor
@@ -69,6 +71,9 @@ func (m *Manager) handleExecutorExecute(request []byte) ([]byte, error) {
 	if isResponseRequest(req) {
 		return m.executeResponses(req)
 	}
+	if isClaudeRequest(req) {
+		return m.executeClaude(req)
+	}
 	turn, err := m.prepareTextTurn(req)
 	if err != nil {
 		return errEnvelope(err), nil
@@ -109,6 +114,9 @@ func (m *Manager) handleExecutorExecuteStream(request []byte) ([]byte, error) {
 	if isResponseRequest(req) {
 		return m.executeResponsesStream(req)
 	}
+	if isClaudeRequest(req) {
+		return m.executeClaudeStream(req)
+	}
 	turn, err := m.prepareTextTurn(req)
 	if err != nil {
 		return errEnvelope(err), nil
@@ -148,9 +156,9 @@ func decodeExecutorRequest(request []byte) (executorRequest, *pluginabi.Error) {
 		return req, typedErr("invalid_credential", "wrong provider credential", 401)
 	}
 	if req.Format != "" && req.Format != "openai" && req.Format != "openai-image" &&
-		req.Format != responseFormat {
+		req.Format != responseFormat && req.Format != claudeFormat {
 		return req, typedErr("unsupported_protocol",
-			"requires the openai, openai-image or openai-response executor format", 400)
+			"requires the openai, openai-image, openai-response or claude executor format", 400)
 	}
 	return req, nil
 }

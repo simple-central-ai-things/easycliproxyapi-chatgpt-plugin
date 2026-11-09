@@ -94,7 +94,7 @@ the code.
 | --- | --- | --- | --- |
 | `auth_provider` | yes | — | — |
 | `model_provider` | yes | — | — |
-| `executor` | yes | `oauth` | `openai`, `openai-image`, `openai-response` |
+| `executor` | yes | `oauth` | `openai`, `openai-image`, `openai-response`, `claude` |
 | `quota_provider` | yes | — | — |
 <!-- /matrix:capabilities -->
 
@@ -218,6 +218,39 @@ the code.
   type (e.g. `web_search_preview`) keeps the typed `400 tools_unsupported`
   refusal. Tool and image requests buffer the whole turn before emitting
   the item sequence (documented tradeoff, as with `openai` streaming).
+- Executor surface (Anthropic Messages, `claude` format): the host's
+  `/v1/messages` requests arrive untranslated and reuse the SAME upstream
+  conversation pipeline — only the inbound decode (`system` string or text
+  block list → leading system message; each message's content flattened:
+  text parts in order, `tool_use` parts rewritten to the reference's exact
+  single-`<tool_calls>` XML text block, `tool_result` parts to
+  `Tool result {tool_use_id}: {content}`, image and other parts
+  contributing nothing) and the outbound shaping differ. Tools reuse the
+  `openai` format's XML emulation (`input_schema` accepted); when the
+  system prompt carries "You are Claude Code", the per-tool schema prompt
+  is replaced by the reference's single-line XML rule (appended even
+  without a tools array). Non-stream answers carry the `message` envelope
+  (`msg_<uuid>` id with dashes — unlike the Responses hex form —
+  `content[]` of `text` and/or `tool_use` blocks with fresh `toolu_<uuid>`
+  ids, `stop_reason` `end_turn` / `tool_use`, `stop_sequence` null, usage
+  `input_tokens` / `output_tokens` as the documented bytes/4 estimate).
+  Stream emits the Anthropic SSE sequence — `message_start` →
+  `content_block_start` → `content_block_delta`* → `content_block_stop`
+  (per block) → `message_delta` (stop_reason + output usage) →
+  `message_stop` — each event framed `event: <type>` / `data: <json>`;
+  EVERY claude turn buffers the whole upstream conversation first and
+  emits the sequence at once (documented tradeoff: the reference's
+  sequence at completion; tool blocks announce empty input then one
+  `input_json_delta`), and there is NO `data: [DONE]` sentinel —
+  `message_stop` is the terminator. The claude request carries no
+  thinking-effort spelling, so the config default applies.
+- Error rendering for `claude`: every failure answers the SAME typed
+  plugin error envelope as the other formats; the host's Claude handler
+  (the `/v1/messages` route) renders it as the Anthropic
+  `{"type":"error","error":{"type","message"}}` body — the error type is
+  derived from the HTTP status (401 → `authentication_error`, 429 →
+  `rate_limit_error`, 5xx → `api_error`, ...), mid-stream failures as the
+  `event: error` frame — so the plugin carries no per-format error bytes.
 - Error classes (pinned one-directionally by `matrix_test.go` — each
   documented row against the dispatcher; "dispatch" pins drive the
   registered Manager offline against a fake host, "error-map" pins drive

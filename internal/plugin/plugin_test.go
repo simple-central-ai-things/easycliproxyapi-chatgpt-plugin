@@ -106,11 +106,11 @@ func TestRegisterEnvelope(t *testing.T) {
 	if caps.ExecutorModelScope != pluginapi.ExecutorModelScopeOAuth {
 		t.Fatalf("executor_model_scope = %q, want %q", caps.ExecutorModelScope, pluginapi.ExecutorModelScopeOAuth)
 	}
-	if strings.Join(caps.ExecutorInputFormats, ",") != "openai,openai-image,openai-response" {
-		t.Fatalf("executor_input_formats = %v, want [openai openai-image openai-response]", caps.ExecutorInputFormats)
+	if strings.Join(caps.ExecutorInputFormats, ",") != "openai,openai-image,openai-response,claude" {
+		t.Fatalf("executor_input_formats = %v, want [openai openai-image openai-response claude]", caps.ExecutorInputFormats)
 	}
-	if strings.Join(caps.ExecutorOutputFormats, ",") != "openai,openai-image,openai-response" {
-		t.Fatalf("executor_output_formats = %v, want [openai openai-image openai-response]", caps.ExecutorOutputFormats)
+	if strings.Join(caps.ExecutorOutputFormats, ",") != "openai,openai-image,openai-response,claude" {
+		t.Fatalf("executor_output_formats = %v, want [openai openai-image openai-response claude]", caps.ExecutorOutputFormats)
 	}
 }
 

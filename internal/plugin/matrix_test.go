@@ -111,7 +111,7 @@ func TestReadmeIdentityAndRegistryPins(t *testing.T) {
 	for _, want := range []string{
 		providerKey, pluginID, pluginVersion,
 		"`auth_provider`", "`model_provider`", "`executor`", "`quota_provider`",
-		"`openai`", "`openai-image`", "`openai-response`",
+		"`openai`", "`openai-image`", "`openai-response`", "`claude`",
 		"bytes / 4",         // token usage is a documented estimate, never exact
 		"b64_json",          // image responses are always served inline
 		"byte-identical",    // wire-format fidelity to the reference
@@ -366,7 +366,7 @@ func TestDocumentedErrorMatrixMatchesDispatch(t *testing.T) {
 				return handle(pluginabi.MethodExecutorExecute, execRequestBody(t, req, ""))
 			case "unsupported_protocol":
 				return handle(pluginabi.MethodExecutorExecute, execBody(func(r *pluginapi.ExecutorRequest) {
-					r.Format = "claude"
+					r.Format = "gemini"
 				}, ""))
 			case "invalid_credential":
 				return handle(pluginabi.MethodExecutorExecute, execBody(func(r *pluginapi.ExecutorRequest) {

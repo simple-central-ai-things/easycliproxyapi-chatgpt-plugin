@@ -186,7 +186,7 @@ type registrationResult struct {
 // schema_version echo, the pinned identity (with a non-empty GitHubRepository
 // for the host validPlugin gate), and the exact capability surface.
 func registrationEnvelope() []byte {
-	formats := []string{"openai", "openai-image", responseFormat}
+	formats := []string{"openai", "openai-image", responseFormat, claudeFormat}
 	return ok(registrationResult{
 		SchemaVersion: pluginabi.SchemaVersion,
 		Metadata: pluginapi.Metadata{

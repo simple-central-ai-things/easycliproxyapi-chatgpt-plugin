@@ -63,6 +63,18 @@ internal/plugin/
                               re-login (account recovery) — authorize
                               bootstrap + verify + exchange, stored like
                               the browser login (source_type "password")
+  management.go               host Management API plumbing:
+                              management.register (route list, no handler
+                              crosses the ABI) + management.handle
+                              (exact-path router, 404/405 typed bodies)
+                              for the import surface
+  import.go                   F5 account imports: CPA codex export (file +
+                              remote list/download) and sub2api admin
+                              (login + paged accounts + accounts/data),
+                              full-token-set capture, access_token dedupe
+                              via host.auth.list/get, save through
+                              saveCredential (host.auth.save), inline
+                              {added, skipped, errors} summary
   password_sentinel.go        the auth-flow sentinel: FNV-1a-32 PoW solve +
                               sentinel/req acquisition (distinct from the
                               conversation-flow sentinel in upstream/;
@@ -145,7 +157,9 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   (the host `validPlugin` gate rejects an empty value).
 - Registration capabilities (exact surface): `auth_provider`,
   `model_provider`, `executor` (model scope `oauth`, formats `openai` +
-  `openai-image` + `openai-response` + `claude` in and out), `quota_provider`.
+  `openai-image` + `openai-response` + `claude` in and out),
+  `quota_provider`, `management_api` (turns on the host Management API for
+  the import routes).
 - Provider identifiers: `auth.identifier`, `executor.identifier` and
   `quota.identifier` all return `{identifier:"chatgpt-proxy"}`.
 - Host config block (EasyCLI `config.yaml`):

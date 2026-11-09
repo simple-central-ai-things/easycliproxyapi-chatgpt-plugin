@@ -103,6 +103,9 @@ func TestRegisterEnvelope(t *testing.T) {
 	if !caps.AuthProvider || !caps.ModelProvider || !caps.Executor || !caps.QuotaProvider {
 		t.Fatalf("capabilities booleans wrong: %+v", caps)
 	}
+	if !caps.ManagementAPI {
+		t.Fatalf("capabilities.management_api must be true: the host turns the Management API on only when the registration advertises it (import routes)")
+	}
 	if caps.ExecutorModelScope != pluginapi.ExecutorModelScopeOAuth {
 		t.Fatalf("executor_model_scope = %q, want %q", caps.ExecutorModelScope, pluginapi.ExecutorModelScopeOAuth)
 	}

@@ -13,7 +13,8 @@ OpenAI-compatible provider **`chatgpt-proxy`**.
 - Advertised capabilities: `auth_provider` (browser OAuth + refresh-token
   lifecycle), `model_provider` (per-credential upstream catalog),
   `executor` (formats `openai`, `openai-image`, `openai-response`, `claude`),
-  and `quota_provider` (native host panel cards).
+  `quota_provider` (native host panel cards), and `management_api`
+  (the CPA / sub2api account imports as host Management API routes).
 
 ## Why
 
@@ -49,10 +50,12 @@ internal/plugin/              Manager + RPC dispatch (the single seam: all
                               identity constants, registration envelope,
                               auth parse/refresh, browser OAuth login,
                               password re-login (account recovery) with the
-                              auth-flow sentinel PoW, per-credential model
-                              catalog, quota cards, text/image/search
-                              executors, envelope helpers, config/credential
-                              aliases
+                              auth-flow sentinel PoW, Management API
+                              plumbing (management.register/handle routing
+                              the import surface), CPA / sub2api account
+                              imports, per-credential model catalog, quota
+                              cards, text/image/search executors, envelope
+                              helpers, config/credential aliases
 internal/upstream/            the upstream reverse protocol: transport seam
                               over the host callbacks, session headers,
                               sentinel/PoW/turnstile VM, conversation SSE +
@@ -99,7 +102,12 @@ the code.
 | `model_provider` | yes | — | — |
 | `executor` | yes | `oauth` | `openai`, `openai-image`, `openai-response`, `claude` |
 | `quota_provider` | yes | — | — |
+| `management_api` | yes | — | — |
 <!-- /matrix:capabilities -->
+
+  `management_api` is what turns on the host Management API: the host
+  invokes `management.register` only when it sees the flag, and the reply
+  lists the plugin-owned import routes (see Account imports below).
 
 - Published model ids (routed by the executor on these exact names):
 
@@ -151,11 +159,12 @@ the code.
   `account_id`, `plan`, `source_type`, the `fp` fingerprint block
   (`user_agent`, `impersonate`, `oai_device_id`, `oai_session_id`) and
   `last_refresh_at` / `last_refresh_error`. `plan` is
-  `free|plus|pro|team|enterprise` (`""` = unknown) and is persisted at
-  login and refreshed on every token refresh; `source_type` is
-  `web|codex|oauth_login|password` (`password` marks a record recovered by
-  the password re-login below). Auth-file names are stable hashes — never
-  an email. Host-managed keys (`label`, `disabled`, `priority`, ...) travel
+  `free|plus|pro|team|enterprise` (`""` = unknown and picked up at the
+  first refresh — which is where imported records start); `source_type`
+  is `web|codex|oauth_login|password` (`password` marks a record recovered
+  by the password re-login below, `codex` the imports — both CPA and
+  sub2api sources, the reference's tag). Auth-file names are stable hashes
+  — never an email. Host-managed keys (`label`, `disabled`, `priority`, ...) travel
   in metadata and survive refresh rewrites untouched.
 - OAuth login (browser sign-in from the management panel):
   `auth.login.start` builds the authorize URL against exactly
@@ -210,6 +219,83 @@ the code.
   crosses the ABI only as this RPC's input and appears only in the verify
   body; verify refusals answer FIXED typed messages and never echo the
   upstream error body (which could echo credential material).
+- Account imports (host Management API routes): the plugin advertises the
+  `management_api` capability, so the host invokes `management.register` at
+  startup; the reply lists exactly these routes by method + path +
+  description (the handler never crosses the ABI — the host calls back via
+  `management.handle` for every hit). Paths are EXACT, no path params, and
+  resolved by the host under `/v0/management/` (the host authenticates
+  management traffic before dispatching it to the plugin):
+
+  | Method | Path (under `/v0/management/`) | Request body | Response |
+  | --- | --- | --- | --- |
+  | `POST` | `chatgpt-proxy/import/cpa-file` | the CLIProxyAPI codex auth-file export JSON directly | `{added, skipped, errors[], file?}` |
+  | `GET` | `chatgpt-proxy/import/cpa-remote/files` | `{base_url, secret_key}` | `{files:[{name, email}]}` |
+  | `POST` | `chatgpt-proxy/import/cpa-remote` | `{base_url, secret_key, files:[names]}` | `{added, skipped, errors[]}` |
+  | `GET` | `chatgpt-proxy/import/sub2api/accounts` | `{base_url, email, password}` | `{accounts:[{id, name, email, plan_type, status, expires_at, has_refresh_token}]}` |
+  | `POST` | `chatgpt-proxy/import/sub2api` | `{base_url, email, password, accounts:[ids]}` | `{added, skipped, errors[]}` |
+
+  Each handler takes the source config INLINE in the body — the
+  reference's pool/server dict passed by value. Pool/server persistence
+  (CRUD), the reference's async job record, the sub2api `api_key` auth
+  alternative and its groups list are follow-ups; these handlers run to
+  completion inside one `management.handle` call and answer the job-summary
+  shape `{added, skipped, errors:[{name, message}]}` inline. An unknown
+  exact path answers `404 management_not_found`, a known path with the
+  wrong method `405 management_method_not_allowed` (defense in depth — the
+  host's own lookup filters both before dispatching).
+  - CPA legs: `GET {base_url}/v0/management/auth-files` and
+    `GET {base_url}/v0/management/auth-files/download?name=<file>`, both
+    with `Authorization: Bearer <secret_key>`. The download payload is a
+    CLIProxyAPI codex auth file; the reference extracts ONLY the access
+    token, but this plugin captures the FULL token set it provides
+    (access token required; refresh/id tokens when present, flat or nested
+    under `tokens`) — a deliberate superset, so the saved credential joins
+    the plugin's OAuth `auth.refresh` lifecycle. The reference's
+    post-import keepalive (`refresh_accounts`) is NOT reimplemented: the
+    executor's 401 refresh-retry and the host-scheduled refresh do that on
+    demand. Batch imports run sequentially (deterministic summary order,
+    unlike the reference's thread pool); one bad file records an error and
+    never aborts the rest.
+  - sub2api legs: `POST {base_url}/api/v1/auth/login` with `{email,
+    password}` → the admin JWT (envelope unwrapped), used as
+    `Authorization: Bearer <jwt>` for `GET /api/v1/admin/accounts`
+    (paged: `platform=openai`, `type=oauth`, `page_size=200`, until the
+    page is short or `page*200 >= total`) and `GET /api/v1/admin/accounts/data?ids=<csv>&timezone=Asia/Shanghai`
+    (the reference's GET shape is ported as-is — the ids travel as a
+    comma-joined query param, never a body). The `{code, message, data}`
+    envelope unwrap and the paged-item extraction (`items`/`data`/`list`
+    keys, bare lists) are ported faithfully to handle the sub2api
+    response-shape variations. Token keys fall back
+    `access_token` → `accessToken` → `token`. The JWT is acquired per
+    import call — never persisted, and never logged, replied or saved.
+  - Credential save + dedupe: every import is saved through the same
+    `host.auth.save` + stable-hash file name (`chatgpt-proxy-<sha256-16
+    hex>.json`, never an email) the logins use, with `source_type:
+    "codex"` (the reference tags BOTH import sources "codex" — the token
+    shape both carry) and the same record shape, so `auth.parse`,
+    `auth.refresh`, the executor refresh-retry and quota work on it
+    unchanged. JWT claims backfill any missing identity (the auth.parse
+    precedent); the plan is left `""` and picked up at the first refresh.
+    Dedupe by access_token runs against BOTH the existing store
+    (`host.auth.list`/`host.auth.get`) and the batch itself: an import
+    whose access token is already known answers `skipped` — not added, not
+    an error, and never a save. Saved credentials contain ONLY the token
+    set + identity + source_type — never the import source's
+    secret_key/password.
+  - Secret hygiene (first-class): the CPA `secret_key`, the sub2api
+    password and the sub2api JWT cross the ABI only as the
+    `management.handle` request input and appear only in the outbound
+    `Authorization` headers / the sub2api login body. Every reply, typed
+    refusal, summary entry and saved credential carries FIXED text —
+    upstream bodies are read only to pick the error branch, never echoed
+    (the F4 `classifyPasswordVerifyError` pattern). The error classes:
+    `import_invalid_request` (400, malformed body / missing config),
+    `import_unauthorized` (401, the remote rejected the credentials),
+    `import_remote_failed` (502 retryable, transport or other refusal),
+    `import_payload_invalid` (400 inline body / 502 remote payload shape),
+    `import_save_failed` (500 retryable, the host credential store
+    refused).
 - Executor surface (text, `openai` format): conversation turns arrive as
   `executor.execute` / `executor.execute_stream` in the `openai` format.
   Model resolution strips the `chatgpt-proxy/openai/` prefix to the
@@ -368,6 +454,11 @@ the code.
 | `no_auth_code` | 502 | yes | dispatch |
 | `sentinel_pow_failed` | 502 | yes | dispatch |
 | `rate_limit_exceeded` | 429 | yes | dispatch |
+| `import_invalid_request` | 400 | no | import |
+| `import_unauthorized` | 401 | no | import |
+| `import_remote_failed` | 502 | yes | import |
+| `import_payload_invalid` | 400, 502 | no | import |
+| `import_save_failed` | 500 | yes | import |
 <!-- /matrix:errors -->
 
   `rate_limited` carries `Retry-After` when upstream sends it;
@@ -383,7 +474,15 @@ the code.
   never echo the upstream body, `need_verification_code` marks an
   email-OTP account that headless login cannot finish, and
   `sentinel_pow_failed` is the PoW iteration cap (retryable — a fresh
-  challenge usually solves).
+  challenge usually solves). The import codes (`import_invalid_request` …
+  `import_save_failed`) come from the Management API import routes:
+  `import_payload_invalid` answers 400 for an inline export that carries
+  no access token and 502 for a remote payload that misses the expected
+  shape; `import_save_failed` is a host credential-store refusal (the
+  import aborts typed rather than saving blind); the rest, and every
+  per-file error entry, carry fixed text only — the "import" pins in
+  `matrix_test.go` drive the routes offline against a scripted host
+  transport.
 - Image executor surface (`openai-image`, the image surface note): the
   host's `/v1/images/generations` and `/v1/images/edits` arrive at
   `executor.execute` / `executor.execute_stream` untranslated and are

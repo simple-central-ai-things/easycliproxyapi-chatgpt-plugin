@@ -12,7 +12,10 @@
 // (F4) runs password re-login — account recovery through the auth-flow
 // sentinel + PKCE — as a single synchronous call;
 // executor.execute / executor.execute_stream (Task 12) serve OpenAI-format
-// text conversation turns over the sentinel handshake + conversation SSE.
+// text conversation turns over the sentinel handshake + conversation SSE;
+// management.register / management.handle (F5) expose the CPA / sub2api
+// account imports as host Management API routes (management.go) that write
+// login-shaped credentials into the host store (import.go).
 package plugin
 
 import (
@@ -134,6 +137,10 @@ func (m *Manager) Handle(method string, request []byte) (resp []byte, err error)
 		return m.handleExecutorExecute(request)
 	case pluginabi.MethodExecutorExecuteStream:
 		return m.handleExecutorExecuteStream(request)
+	case pluginabi.MethodManagementRegister:
+		return m.handleManagementRegister(request)
+	case pluginabi.MethodManagementHandle:
+		return m.handleManagementHandle(request)
 	case pluginabi.MethodPluginQuiesce, pluginabi.MethodPluginShutdown:
 		return m.handleShutdown()
 	default:
@@ -181,7 +188,9 @@ func (m *Manager) handleShutdown() ([]byte, error) {
 
 // capabilities is the exact capability surface the registration publishes.
 // The host decodes this into its rpcCapabilities; unset capability booleans
-// default to false, so the seven fields below are the complete surface.
+// default to false, so the eight fields below are the complete surface.
+// ManagementAPI must be true for the host to invoke management.register at
+// all — it is what turns on the import routes (management.go).
 type capabilities struct {
 	AuthProvider          bool                         `json:"auth_provider"`
 	ModelProvider         bool                         `json:"model_provider"`
@@ -190,6 +199,7 @@ type capabilities struct {
 	ExecutorInputFormats  []string                     `json:"executor_input_formats"`
 	ExecutorOutputFormats []string                     `json:"executor_output_formats"`
 	QuotaProvider         bool                         `json:"quota_provider"`
+	ManagementAPI         bool                         `json:"management_api"`
 }
 
 // registrationResult is the rpcRegistration-shaped body the host expects for
@@ -222,6 +232,7 @@ func registrationEnvelope() []byte {
 			ExecutorInputFormats:  formats,
 			ExecutorOutputFormats: formats,
 			QuotaProvider:         true,
+			ManagementAPI:         true,
 		},
 	})
 }

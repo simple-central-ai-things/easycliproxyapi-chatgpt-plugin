@@ -166,6 +166,7 @@ func TestDocumentedCapabilityMatrixMatchesRegistration(t *testing.T) {
 		"model_provider": reg.Capabilities.ModelProvider,
 		"executor":       reg.Capabilities.Executor,
 		"quota_provider": reg.Capabilities.QuotaProvider,
+		"management_api": reg.Capabilities.ManagementAPI,
 	}
 
 	advertisedFormats := map[string]bool{}
@@ -390,6 +391,8 @@ func TestDocumentedErrorMatrixMatchesDispatch(t *testing.T) {
 			default:
 				t.Fatalf("matrix pin %q has no dispatch fixture", code)
 			}
+		case "import":
+			return importMatrixError(t, code)
 		case "error-map":
 			switch code {
 			case "invalid_token":
@@ -523,4 +526,49 @@ func passwordLoginMatrixError(t *testing.T, code string) *pluginabi.Error {
 		t.Fatalf("Handle(auth.login.password): %v", err)
 	}
 	return decodeErrorEnvelope(t, resp).Error
+}
+
+// importMatrixError drives one import management route offline against a
+// scripted host transport and returns the typed refusal it answers. The
+// import classes refuse as management responses (a typed JSON body with an
+// HTTP status), not RPC envelopes, so the pin decodes that body.
+func importMatrixError(t *testing.T, code string) *pluginabi.Error {
+	t.Helper()
+	fake := newImportFakeCaller()
+	m := newAuthTestManager(t, fake)
+	cpaConfig := []byte(`{"base_url":"http://cpa.local","secret_key":"matrix-secret"}`)
+	switch code {
+	case "import_invalid_request":
+		fake.httpResults = nil
+		return importMatrixRefusal(t, handleManagement(t, m, http.MethodPost, importRouteCpaFile, []byte(`{`)))
+	case "import_unauthorized":
+		fake.httpResults = []hostHTTPResponse{{StatusCode: http.StatusUnauthorized, Body: []byte(`{"detail":"no"}`)}}
+		return importMatrixRefusal(t, handleManagement(t, m, http.MethodGet, importRouteCpaRemoteFiles, cpaConfig))
+	case "import_remote_failed":
+		fake.httpResults = []hostHTTPResponse{{StatusCode: http.StatusBadGateway, Body: []byte(`{"detail":"no"}`)}}
+		return importMatrixRefusal(t, handleManagement(t, m, http.MethodGet, importRouteCpaRemoteFiles, cpaConfig))
+	case "import_payload_invalid":
+		return importMatrixRefusal(t, handleManagement(t, m, http.MethodPost, importRouteCpaFile, []byte(`{"refresh_token":"rt-only"}`)))
+	case "import_save_failed":
+		fake.listError = "store-denied"
+		return importMatrixRefusal(t, handleManagement(t, m, http.MethodPost, importRouteCpaFile, []byte(`{"access_token":"at-matrix"}`)))
+	default:
+		t.Fatalf("matrix pin %q has no import fixture", code)
+	}
+	return nil // unreachable: every branch returns or fatals above
+}
+
+// importMatrixRefusal decodes a refusal management response into the
+// pluginabi.Error shape the matrix rows pin (code + status + retryable).
+func importMatrixRefusal(t *testing.T, resp pluginapi.ManagementResponse) *pluginabi.Error {
+	t.Helper()
+	var body managementErrorBody
+	if err := json.Unmarshal(resp.Body, &body); err != nil || body.Error.Code == "" {
+		t.Fatalf("management refusal body is not typed: %s", resp.Body)
+	}
+	return &pluginabi.Error{
+		Code:       body.Error.Code,
+		HTTPStatus: resp.StatusCode,
+		Retryable:  body.Error.Retryable,
+	}
 }

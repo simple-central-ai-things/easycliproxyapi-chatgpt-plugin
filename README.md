@@ -25,12 +25,16 @@ each ChatGPT consumer account into a credential the EasyCLI host can manage
 through the gateway's existing model routing. No extra container, no extra
 published port: the plugin loads inside the host process.
 
-The v0.1.0 surface: the credential lifecycle (auth parse/refresh, browser
-OAuth login with the plan persisted at login and refresh), the per-credential
-model catalog, the quota cards, the OpenAI-format text conversation executor
-(streaming and non-streaming) and the `openai-image` executor surface (image
+The v0.2.0 surface: the credential lifecycle (auth parse/refresh, browser
+OAuth login, password re-login / account recovery, with the plan persisted at
+login and refresh), the per-credential model catalog, the quota cards, the
+text conversation executor in the `openai`, `openai-response` (Responses API)
+and `claude` (Anthropic Messages) formats (streaming and non-streaming), web
+search with cited answers, the `openai-image` executor surface (image
 generation and editing routed by model base name to the web-drawing and
-codex pipelines). Known gaps are the Phase 2 list in `RELEASE_NOTES.md`.
+codex pipelines), CPA / sub2api account imports as host Management API
+routes, and the drawing workbench (a browser resource page driving the image
+pipeline). Remaining gaps are in `RELEASE_NOTES.md`.
 
 ## Layout
 
@@ -78,7 +82,7 @@ tests/utls_client*_test.go    the utls leg of the TLS spike (-tags 'live
 registry.json                 host plugin-store registry entry
 PROVENANCE.md                 TLS spike verdict ledger
 CHANGELOG.md                  user-facing release summaries
-RELEASE_NOTES.md              the v0.1.0 release notes
+RELEASE_NOTES.md              the v0.2.0 release notes
 plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
 .github/workflows/tests.yml   CI: go vet + go test + glibc c-shared build
                               (blocking gate) + loadsmoke
@@ -93,7 +97,7 @@ the exception: it is pinned one-directionally, each documented row against
 the code.
 
 - Plugin identity (pinned by `internal/plugin/plugin_test.go`):
-  `name=easycliproxyapi-chatgpt-provider`, `version=0.1.0`, provider key
+  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.0`, provider key
   `chatgpt-proxy`, `GitHubRepository` = this repo (the host `validPlugin`
   gate rejects an empty value). The `registry.json` store entry carries the
   same id, version and repository URL.

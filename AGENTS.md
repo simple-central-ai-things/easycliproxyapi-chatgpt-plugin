@@ -155,7 +155,7 @@ tests/utls_client*_test.go    utls leg of the spike (-tags 'live utls';
 registry.json                 host plugin-store registry entry
 PROVENANCE.md                 TLS spike verdict ledger
 CHANGELOG.md                  user-facing release summaries
-RELEASE_NOTES.md              the v0.1.0 release notes
+RELEASE_NOTES.md              the v0.2.0 release notes
 plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
 .github/workflows/tests.yml   CI: go vet + go test + glibc c-shared build
                               (blocking gate) + loadsmoke
@@ -164,7 +164,7 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
 ## Contracts
 
 - Plugin identity (pinned by `internal/plugin/plugin_test.go`):
-  `name=easycliproxyapi-chatgpt-provider`, `version=0.1.0`, provider key
+  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.0`, provider key
   `chatgpt-proxy`,
   `GitHubRepository=https://github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin`
   (the host `validPlugin` gate rejects an empty value).

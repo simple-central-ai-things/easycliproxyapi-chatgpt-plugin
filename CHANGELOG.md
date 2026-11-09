@@ -2,6 +2,72 @@
 
 This file records user-facing release summaries.
 
+## v0.2.0 — 2026-11-09 (Phase 2: full reference feature parity)
+
+Second release of the chatgpt-proxy provider: the six Phase 2 features ported
+from the MIT reference, each independently reviewed. The registration now
+advertises `openai-response` and `claude` executor formats and the
+`management_api` capability.
+
+- **Responses API format (`openai-response`).** `/v1/responses` in and out
+  over the same conversation pipeline: `input` (string or item list) +
+  `instructions` decode to messages; non-stream returns the
+  `response.completed` envelope; streaming emits the Responses SSE sequence
+  (`response.created` → `output_item.added` → `output_text.delta`* →
+  `response.completed`). The `image_generation` tool routes through the image
+  pipelines and emits `image_generation_call` items with a base64 `result`;
+  function tools reuse the XML emulation.
+- **Anthropic Messages format (`claude`).** `/v1/messages` in and out:
+  `system`/message content blocks decode (tool_use/tool_result flatten to
+  text, Claude Code rule-swap), tools reuse the XML emulation, the reply
+  parses back into `tool_use` content blocks; non-stream returns the
+  `message` envelope (`stop_reason`, `toolu_<uuid>` ids); streaming emits the
+  Anthropic SSE sequence (`event:/data:` framing, no `[DONE]`). The host's
+  Claude handler renders the typed plugin error as the Anthropic error
+  envelope.
+- **Web search (cited answers).** A request carrying a `web_search`
+  (`_preview`) tool with no other tools, a `web_search` `tool_choice`, a
+  `web_search_options` block, or a search model prefix routes through the
+  upstream search flow (`system_hints:["search"]`, `force_use_search`,
+  conversation poll with the finished-status / stable-text stop condition)
+  instead of plain conversation, and returns the answer with a numbered
+  `Sources:` block + `url_citation` annotations in every text format. New
+  config keys `search-upstream-model` (default `gpt-5-5`),
+  `search-timeout-secs` (300) and `search-poll-interval-secs` (3); new error
+  classes `search_poll_timeout` and `search_response_malformed`.
+- **Password re-login (account recovery).** New synchronous
+  `auth.login.password` RPC recovers an account whose refresh token died:
+  auth-flow sentinel (FNV-1a-32 proof-of-work, differentially pinned to the
+  reference) + PKCE S256 → `POST /api/accounts/password/verify` (JSON
+  `{"password":…}`, email as `login_hint`) → `continue_url` code extraction
+  (an `email_otp_verification` target is refused typed) →
+  `POST /api/accounts/oauth/token`. The recovered triple stores in the same
+  shape a browser login produces (`source_type:"password"`); the password
+  crosses the ABI only as the RPC input and never reaches logs, envelopes or
+  stored records.
+- **CPA / sub2api account imports.** The registration now advertises
+  `management_api`; five exact-path host Management API routes import
+  ChatGPT accounts and write them via `host.auth.save` as `type:"chatgpt-proxy"`
+  records (`source_type:"codex"`, the full token set the source provides,
+  stable-hash file names, dedupe by access_token): `POST
+  chatgpt-proxy/import/cpa-file` (inline codex export), `GET/POST
+  chatgpt-proxy/import/cpa-remote[/files]` (a remote CPA management server),
+  and `GET/POST chatgpt-proxy/import/sub2api[/accounts]` (a sub2api admin).
+  The import secret_key/password/JWT never leaves the outbound transport.
+- **Drawing workbench.** A browser-navigable resource page under
+  `/v0/resource/plugins/<plugin-id>/` (a data-free, dependency-free HTML/JS
+  shell) plus `POST chatgpt-proxy/workbench/generate`, `POST
+  chatgpt-proxy/workbench/edit` and `GET chatgpt-proxy/workbench/models`
+  management routes that drive the existing image pipeline (credential
+  selected from the host store, `n` 1..4, inline `b64_json` results, history
+  kept client-side).
+
+Deployment: as v0.1.0 — copy the rebuilt glibc `linux/amd64` `.so` into the
+host's plugin directory and restart; the new routes/formats appear on
+registration. The README contract matrices (capabilities, formats, config,
+error classes, import + workbench routes) are pinned by
+`internal/plugin/matrix_test.go` and grew with this release.
+
 ## v0.1.0 — 2026-11-09 (initial release + live fixes)
 
 First tagged release of the chatgpt-proxy provider: a Go `c-shared` plugin

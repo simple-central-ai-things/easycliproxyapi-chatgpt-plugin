@@ -48,9 +48,11 @@ internal/plugin/              Manager + RPC dispatch (the single seam: all
                               host I/O flows through the injected caller),
                               identity constants, registration envelope,
                               auth parse/refresh, browser OAuth login,
-                              per-credential model catalog, quota cards,
-                              text/image/search executors, envelope helpers,
-                              config/credential aliases
+                              password re-login (account recovery) with the
+                              auth-flow sentinel PoW, per-credential model
+                              catalog, quota cards, text/image/search
+                              executors, envelope helpers, config/credential
+                              aliases
 internal/upstream/            the upstream reverse protocol: transport seam
                               over the host callbacks, session headers,
                               sentinel/PoW/turnstile VM, conversation SSE +
@@ -151,8 +153,9 @@ the code.
   `last_refresh_at` / `last_refresh_error`. `plan` is
   `free|plus|pro|team|enterprise` (`""` = unknown) and is persisted at
   login and refreshed on every token refresh; `source_type` is
-  `web|codex|oauth_login`. Auth-file names are stable hashes — never an
-  email. Host-managed keys (`label`, `disabled`, `priority`, ...) travel
+  `web|codex|oauth_login|password` (`password` marks a record recovered by
+  the password re-login below). Auth-file names are stable hashes — never
+  an email. Host-managed keys (`label`, `disabled`, `priority`, ...) travel
   in metadata and survive refresh rewrites untouched.
 - OAuth login (browser sign-in from the management panel):
   `auth.login.start` builds the authorize URL against exactly
@@ -172,6 +175,41 @@ the code.
   exchanges the one-time code (with the same pinned `redirect_uri`) and
   verifies the account before returning the credential. No loopback port
   is reachable for the redirect, by design.
+- Password re-login (account recovery): `auth.login.password` recovers an
+  account whose refresh token died, given its email + password. It is a
+  SINGLE synchronous RPC — the browser flow's start/poll pair and attempt
+  store exist to bridge the async gap to the host's callback file, which
+  this flow has no part of: every leg completes inside one call, so there
+  is no attempt record to store, GC or replay-protect. Wire shape:
+  `{"Provider","Email","Password","host_callback_id"}` (PascalCase, the
+  SDK's request convention) answers the poll response shape (`status`
+  success/error + the `auth` storage record on success); typed refusals
+  travel as error envelopes. The flow: ① an authorize bootstrap GET
+  against `https://auth.openai.com/api/accounts/authorize` (sixteen pinned
+  params — the email travels as `login_hint`, the session is keyed by the
+  `oai-did` device cookie; a redirect to an error page is decoded, with
+  `rate_limit_exceeded` its own typed class) → ② the AUTH-FLOW sentinel —
+  the FNV-1a-32 proof-of-work challenge over
+  `sentinel.openai.com/backend-api/sentinel/req` (flow `password_verify`,
+  500k-iteration cap, differential-pinned to the reference
+  `utils/sentinel.py`; distinct from the conversation-flow sentinel in
+  `internal/upstream`) — ③ `POST /api/accounts/password/verify` with a
+  JSON `{"password": ...}` body (the reference's exact shape — the email
+  never repeats), the `openai-sentinel-token` header and the `oai-did` +
+  `oai-sc` cookies → ④ the `continue_url`'s `code` traded at the same
+  token endpoint as the browser login with the flow's own 86-char PKCE
+  verifier (`auth0-client` header, the reference's exact exchange headers)
+  → ⑤ the SAME storage as the browser login: `/backend-api/me`
+  verification, JWT normalization, best-effort plan probe, stable hashed
+  file name — `source_type: "password"`, so `auth.parse`, `auth.refresh`,
+  the executor refresh-retry and quota work on the record unchanged. A
+  `continue_url` with no code whose `page.type` is
+  `email_otp_verification` is typed `need_verification_code` (the account
+  is unusable headless — 2FA pages land in the retryable `no_auth_code`);
+  the code is never exchanged without one. Secret hygiene: the password
+  crosses the ABI only as this RPC's input and appears only in the verify
+  body; verify refusals answer FIXED typed messages and never echo the
+  upstream error body (which could echo credential material).
 - Executor surface (text, `openai` format): conversation turns arrive as
   `executor.execute` / `executor.execute_stream` in the `openai` format.
   Model resolution strips the `chatgpt-proxy/openai/` prefix to the
@@ -322,6 +360,14 @@ the code.
 | `no_assistant_content` | 502 | no | error-map |
 | `search_poll_timeout` | 504 | yes | error-map |
 | `search_response_malformed` | 502 | no | error-map |
+| `invalid_password` | 401 | no | dispatch |
+| `unsupported_region` | 403 | no | dispatch |
+| `login_state_invalid` | 400 | yes | dispatch |
+| `password_verify_failed` | 502 | yes | dispatch |
+| `need_verification_code` | 403 | no | dispatch |
+| `no_auth_code` | 502 | yes | dispatch |
+| `sentinel_pow_failed` | 502 | yes | dispatch |
+| `rate_limit_exceeded` | 429 | yes | dispatch |
 <!-- /matrix:errors -->
 
   `rate_limited` carries `Retry-After` when upstream sends it;
@@ -331,7 +377,13 @@ the code.
   `no_assistant_content` — a completed turn with no visible assistant
   message is always typed 502, never an empty 200; `unsupported` is the
   `quota.reset` refusal (the upstream windows are rate limits that reset
-  on their own schedule).
+  on their own schedule). The password re-login codes
+  (`invalid_password` … `rate_limit_exceeded`) come from
+  `auth.login.password`: the verify refusals carry fixed messages and
+  never echo the upstream body, `need_verification_code` marks an
+  email-OTP account that headless login cannot finish, and
+  `sentinel_pow_failed` is the PoW iteration cap (retryable — a fresh
+  challenge usually solves).
 - Image executor surface (`openai-image`, the image surface note): the
   host's `/v1/images/generations` and `/v1/images/edits` arrive at
   `executor.execute` / `executor.execute_stream` untranslated and are

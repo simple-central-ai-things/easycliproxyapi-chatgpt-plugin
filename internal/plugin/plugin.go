@@ -8,7 +8,9 @@
 // same Manager. auth.parse / auth.refresh (Task 3) claim type=chatgpt-proxy
 // credential records and run the OAuth refresh_token lifecycle;
 // auth.login.start / auth.login.poll (Task 4) run the browser OAuth PKCE
-// flow against the host's callback-file mechanism;
+// flow against the host's callback-file mechanism; auth.login.password
+// (F4) runs password re-login — account recovery through the auth-flow
+// sentinel + PKCE — as a single synchronous call;
 // executor.execute / executor.execute_stream (Task 12) serve OpenAI-format
 // text conversation turns over the sentinel handshake + conversation SSE.
 package plugin
@@ -61,6 +63,11 @@ type Manager struct {
 	// models holds the per-credential catalog snapshots (models.go); it
 	// carries its own lock for the same reason.
 	models *modelCatalog
+
+	// sentinelFor builds the auth-flow sentinel generator (password_login.go).
+	// Tests may replace it to shrink the PoW budget; production wiring never
+	// changes it after New.
+	sentinelFor func(deviceID, sid string) *sentinelGenerator
 }
 
 // New returns a Manager whose outbound host calls flow through host. A nil
@@ -69,7 +76,14 @@ func New(host caller) (*Manager, error) {
 	if host == nil {
 		return nil, fmt.Errorf("host caller is required")
 	}
-	return &Manager{host: host, logins: make(map[string]loginAttempt), models: newModelCatalog()}, nil
+	return &Manager{
+		host:   host,
+		logins: make(map[string]loginAttempt),
+		models: newModelCatalog(),
+		sentinelFor: func(deviceID, sid string) *sentinelGenerator {
+			return newSentinelGenerator(deviceID, sentinelUserAgent, sid)
+		},
+	}, nil
 }
 
 // Handle dispatches one RPC method and returns envelope bytes. Handler
@@ -108,6 +122,10 @@ func (m *Manager) Handle(method string, request []byte) (resp []byte, err error)
 		return m.handleLoginStart(request)
 	case pluginabi.MethodAuthLoginPoll:
 		return m.handleLoginPoll(request)
+	case methodAuthLoginPassword:
+		// Plugin-defined method (the SDK carries no wire type for it):
+		// synchronous password re-login / account recovery.
+		return m.handlePasswordLogin(request)
 	case pluginabi.MethodModelStatic:
 		return m.handleModelStatic(request)
 	case pluginabi.MethodModelForAuth:

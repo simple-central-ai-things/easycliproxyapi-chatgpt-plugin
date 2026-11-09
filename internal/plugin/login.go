@@ -112,16 +112,24 @@ func validateAuthorizeURL(raw string) error {
 	return nil
 }
 
-// pkcePair returns a 48-random-byte verifier (base64url) and its S256
-// challenge: BASE64URL(SHA256(ASCII(verifier))).
-func pkcePair() (string, string, error) {
-	buf := make([]byte, pkceVerifierBytes)
+// pkcePairBytes returns n-random-byte verifier (base64url, no padding) and
+// its S256 challenge: BASE64URL(SHA256(ASCII(verifier))). The browser login
+// uses the 48-byte verifier (pkceVerifierBytes); the password recovery flow
+// uses the reference utils/pkce.py shape (64 bytes → 86 chars).
+func pkcePairBytes(n int) (string, string, error) {
+	buf := make([]byte, n)
 	if _, err := rand.Read(buf); err != nil {
 		return "", "", err
 	}
 	verifier := base64.RawURLEncoding.EncodeToString(buf)
 	digest := sha256.Sum256([]byte(verifier))
 	return verifier, base64.RawURLEncoding.EncodeToString(digest[:]), nil
+}
+
+// pkcePair returns a 48-random-byte verifier (base64url) and its S256
+// challenge.
+func pkcePair() (string, string, error) {
+	return pkcePairBytes(pkceVerifierBytes)
 }
 
 // randomLoginState returns 32 random alphanumeric chars — inside the host's
@@ -305,7 +313,7 @@ func (m *Manager) loginPoll(state, authDir, callbackID string) (pluginapi.AuthLo
 	// deleted BEFORE verify, so no later poll can exchange it again even if
 	// verify fails.
 	m.deleteLoginAttempt(state)
-	return m.verifyLoginAccount(callbackID, tokens), nil
+	return m.verifyLoginAccount(callbackID, tokens, "oauth_login", "ChatGPT account signed in"), nil
 }
 
 // readOAuthCallbackFile reads the host's callback file for state. Any error
@@ -363,12 +371,18 @@ func (m *Manager) exchangeLoginCode(callbackID, code string, attempt loginAttemp
 	if resp.StatusCode != http.StatusOK {
 		return loginTokens{}, oauthTokenError(resp.StatusCode, resp.Body)
 	}
+	return parseLoginTokens(resp.Body)
+}
+
+// parseLoginTokens turns a successful token-exchange body into the triple.
+// Both login flows share it so the stored records stay byte-consistent.
+func parseLoginTokens(body []byte) (loginTokens, error) {
 	var tokenResp struct {
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
 		IDToken      string `json:"id_token"`
 	}
-	if err := json.Unmarshal(resp.Body, &tokenResp); err != nil || strings.TrimSpace(tokenResp.AccessToken) == "" {
+	if err := json.Unmarshal(body, &tokenResp); err != nil || strings.TrimSpace(tokenResp.AccessToken) == "" {
 		return loginTokens{}, errors.New("oauth login exchange returned no access token")
 	}
 	return loginTokens{
@@ -380,8 +394,11 @@ func (m *Manager) exchangeLoginCode(callbackID, code string, attempt loginAttemp
 
 // verifyLoginAccount verifies the fresh access token against /backend-api/me
 // (a 401 there is error, never success) and turns the triple plus the account
-// identity into the credential record. Errors never carry token material.
-func (m *Manager) verifyLoginAccount(callbackID string, tokens loginTokens) pluginapi.AuthLoginPollResponse {
+// identity into the credential record. Both login flows share it (browser
+// OAuth with sourceType "oauth_login", password recovery with "password") so
+// every stored record is byte-identical in shape. Errors never carry token
+// material.
+func (m *Manager) verifyLoginAccount(callbackID string, tokens loginTokens, sourceType, message string) pluginapi.AuthLoginPollResponse {
 	resp, err := m.doHostHTTP(callbackID, http.MethodGet, chatgptMeURL, map[string][]string{
 		"Accept":        {"application/json"},
 		"Authorization": {"Bearer " + tokens.accessToken},
@@ -403,7 +420,7 @@ func (m *Manager) verifyLoginAccount(callbackID string, tokens loginTokens) plug
 		IDToken:      tokens.idToken,
 		Email:        strings.TrimSpace(me.Email),
 		AccountID:    strings.TrimSpace(me.ID),
-		SourceType:   "oauth_login",
+		SourceType:   sourceType,
 	}
 	// JWT claims backfill any identity fact /me left out (Task 3 helper).
 	cred = normalizeCredential(cred)
@@ -418,7 +435,7 @@ func (m *Manager) verifyLoginAccount(callbackID string, tokens loginTokens) plug
 	fileName := FileNameFor(cred)
 	return pluginapi.AuthLoginPollResponse{
 		Status:  pluginapi.AuthLoginStatusSuccess,
-		Message: "ChatGPT account signed in",
+		Message: message,
 		Auth: pluginapi.AuthData{
 			Provider:    providerKey,
 			ID:          fileName,

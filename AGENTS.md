@@ -59,6 +59,15 @@ internal/plugin/
   login.go                    auth.login.start / auth.login.poll: browser
                               OAuth PKCE over the host callback-file
                               mechanism (in-memory attempt store)
+  password_login.go           auth.login.password: synchronous password
+                              re-login (account recovery) — authorize
+                              bootstrap + verify + exchange, stored like
+                              the browser login (source_type "password")
+  password_sentinel.go        the auth-flow sentinel: FNV-1a-32 PoW solve +
+                              sentinel/req acquisition (distinct from the
+                              conversation-flow sentinel in upstream/;
+                              differential-pinned to the reference
+                              utils/sentinel.py)
   models.go                   per-credential model catalog (upstream
                               /backend-api/models union + image models),
                               stale-while-unavailable snapshots

@@ -10,6 +10,7 @@ package plugin
 // goes red.
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -382,6 +383,10 @@ func TestDocumentedErrorMatrixMatchesDispatch(t *testing.T) {
 				return handle(pluginabi.MethodQuotaReset, nil)
 			case "quota_failure":
 				return handle(pluginabi.MethodQuotaFetch, []byte(`{"Provider":"someone-else"}`))
+			case "invalid_password", "unsupported_region", "login_state_invalid",
+				"password_verify_failed", "need_verification_code", "no_auth_code",
+				"sentinel_pow_failed", "rate_limit_exceeded":
+				return passwordLoginMatrixError(t, code)
 			default:
 				t.Fatalf("matrix pin %q has no dispatch fixture", code)
 			}
@@ -456,4 +461,66 @@ func TestDocumentedErrorMatrixMatchesDispatch(t *testing.T) {
 			t.Fatalf("errors matrix %q retryable cell %q, want yes, no or varies", code, wantRetryable)
 		}
 	}
+}
+
+// passwordLoginMatrixError drives auth.login.password offline against a
+// scripted host transport shaped to produce the given typed error, and
+// returns that error. The flow's first two legs (authorize bootstrap,
+// sentinel challenge without PoW) always succeed; the scenario varies the
+// third (verify) or the generator budget (PoW cap).
+func passwordLoginMatrixError(t *testing.T, code string) *pluginabi.Error {
+	t.Helper()
+	authorize := hostHTTPResponse{StatusCode: 200, Body: []byte("<html>login page</html>")}
+	sentinel := hostHTTPResponse{StatusCode: 200, Body: mustJSON(t, map[string]any{
+		"token": "matrix-challenge", "proofofwork": map[string]any{"required": false},
+	})}
+	verify := hostHTTPResponse{StatusCode: 400, Body: []byte(`{"error":{"code":"x","message":"refused"}}`)}
+	switch code {
+	case "invalid_password":
+		verify = hostHTTPResponse{StatusCode: 401, Body: []byte(`{"error":{"code":"a200","message":"Invalid credentials"}}`)}
+	case "unsupported_region":
+		verify = hostHTTPResponse{StatusCode: 403, Body: []byte(`{"error":{"code":"unsupported_country_region_territory"}}`)}
+	case "login_state_invalid":
+		verify = hostHTTPResponse{StatusCode: 400, Body: []byte(`{"error":{"code":"invalid_state"}}`)}
+	case "need_verification_code":
+		verify = hostHTTPResponse{StatusCode: 200, Body: []byte(`{"page":{"type":"email_otp_verification"}}`)}
+	case "no_auth_code":
+		verify = hostHTTPResponse{StatusCode: 200, Body: []byte(`{}`)}
+	case "sentinel_pow_failed":
+		sentinel = hostHTTPResponse{StatusCode: 200, Body: mustJSON(t, map[string]any{
+			"token": "matrix-challenge",
+			// "-" sorts below every hex digit: unsatisfiable, so the shrunk
+			// budget below must trip the typed cap error.
+			"proofofwork": map[string]any{"required": true, "seed": "0", "difficulty": "-"},
+		})}
+	case "rate_limit_exceeded":
+		payload := base64.StdEncoding.EncodeToString([]byte(`{"errorCode":"rate_limit_exceeded"}`))
+		authorize = hostHTTPResponse{
+			StatusCode: 302,
+			Headers:    map[string][]string{"Location": {oauthAuthorizeBase + "/error?payload=" + payload}},
+		}
+	}
+	fake := &httpFakeCaller{httpResults: []hostHTTPResponse{authorize, sentinel, verify}}
+	m := newAuthTestManager(t, fake)
+	if code == "sentinel_pow_failed" {
+		// Shrink the solve budget: an unsatisfiable difficulty must answer
+		// the typed cap error instead of running the production 500k loop.
+		m.sentinelFor = func(deviceID, sid string) *sentinelGenerator {
+			g := newSentinelGenerator(deviceID, sentinelUserAgent, sid)
+			g.maxAttempts = 5
+			return g
+		}
+	}
+	body, err := json.Marshal(passwordLoginRequest{
+		Provider: providerKey, Email: "matrix@example.com",
+		Password: "matrix-password", HostCallbackID: "cb-matrix",
+	})
+	if err != nil {
+		t.Fatalf("marshal auth.login.password request: %v", err)
+	}
+	resp, err := m.Handle(methodAuthLoginPassword, body)
+	if err != nil {
+		t.Fatalf("Handle(auth.login.password): %v", err)
+	}
+	return decodeErrorEnvelope(t, resp).Error
 }

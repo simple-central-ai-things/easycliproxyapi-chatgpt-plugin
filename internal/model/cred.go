@@ -29,7 +29,7 @@ type Credential struct {
 	AccountID    string `json:"account_id"`
 	// Plan is "free|plus|pro|team|enterprise"; "" = unknown.
 	Plan string `json:"plan"`
-	// SourceType is "web|codex|oauth_login".
+	// SourceType is "web|codex|oauth_login|password".
 	SourceType string      `json:"source_type"`
 	Fp         Fingerprint `json:"fp"`
 	// LastRefreshAt is when the token endpoint was last talked to, success

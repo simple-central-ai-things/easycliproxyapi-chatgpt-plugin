@@ -45,14 +45,13 @@ const methodAuthLoginPassword = "auth.login.password"
 // loginRoutePassword is the exact-path management route (relative under
 // /v0/management/) that exposes the SAME recovery core this RPC runs. The
 // SDK's auth contract only knows auth.login.start / auth.login.poll, so the
-// panel had no built-in UI path to recovery; the F5/F6 management plumbing
+// panel had no built-in UI path to recovery; the F5 management plumbing
 // (management.go) gives it one. The RPC itself stays unchanged — both
 // surfaces share handlePasswordLogin, no fork of the flow.
 const loginRoutePassword = providerKey + "/login/password"
 
 // loginRouteBody is the panel wire spelling of the recovery body: lowercase
-// {email, password}, the management-route body convention (import.go,
-// workbench.go). The RPC's PascalCase spelling (passwordLoginRequest) is
+// {email, password}, the management-route body convention (import.go). The RPC's PascalCase spelling (passwordLoginRequest) is
 // accepted too — both merge into the core's own request type.
 type loginRouteBody struct {
 	Email    string `json:"email"`

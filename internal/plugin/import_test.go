@@ -225,11 +225,12 @@ func TestRegisterEnvelopeManagementAPI(t *testing.T) {
 }
 
 // TestManagementRegisterListsImportRoutes pins the management.register
-// reply: exactly the five import routes, the one password-recovery route and
-// the three workbench routes, by method + path + description — no handler
-// (it cannot cross the ABI), no Menu on a management route (a Menu-tagged
-// GET would be diverted to the unauthenticated resource surface) — and
-// exactly the one workbench browser resource (the data-free HTML shell).
+// reply: exactly the five import routes and the one password-recovery route,
+// by method + path + description — no handler (it cannot cross the ABI), no
+// Menu on a management route (a Menu-tagged GET would be diverted to the
+// unauthenticated resource surface) — and NO workbench routes and NO browser
+// resources: the route set is exact, so a resurrected workbench surface
+// fails this pin in either direction.
 func TestManagementRegisterListsImportRoutes(t *testing.T) {
 	m := newTestManager(t)
 	body, _ := json.Marshal(managementRegistrationRequest{BasePath: "/v0/management"})
@@ -253,9 +254,6 @@ func TestManagementRegisterListsImportRoutes(t *testing.T) {
 		importRouteSub2apiAccounts: http.MethodGet,
 		importRouteSub2api:         http.MethodPost,
 		loginRoutePassword:         http.MethodPost,
-		workbenchRouteGenerate:     http.MethodPost,
-		workbenchRouteEdit:         http.MethodPost,
-		workbenchRouteModels:       http.MethodGet,
 	}
 	if len(result.Routes) != len(want) {
 		t.Fatalf("register reply lists %d routes, want exactly %d: %+v", len(result.Routes), len(want), result.Routes)
@@ -279,24 +277,17 @@ func TestManagementRegisterListsImportRoutes(t *testing.T) {
 		}
 	}
 
-	// The one browser resource: the workbench shell, relative under
-	// /v0/resource/plugins/<pluginID>/ (the host resolves and authenticates
-	// nothing for it — the data lives on the management routes).
-	if len(result.Resources) != 1 {
-		t.Fatalf("register reply lists %d resources, want exactly 1: %+v", len(result.Resources), result.Resources)
+	// No browser resources: the reply carries routes only (the workbench
+	// resource surface is gone). Decode the raw result with the resource
+	// field visible so a resurrected resources block fails this pin.
+	var withResources struct {
+		Resources []pluginapi.ResourceRoute `json:"resources"`
 	}
-	resource := result.Resources[0]
-	if resource.Path != workbenchResourcePath {
-		t.Fatalf("resource path = %q, want %q", resource.Path, workbenchResourcePath)
+	if err := json.Unmarshal(env.Result, &withResources); err != nil {
+		t.Fatalf("decode registration result resources: %v (%s)", err, env.Result)
 	}
-	if resource.Menu != workbenchResourceMenu {
-		t.Fatalf("resource Menu = %q, want %q", resource.Menu, workbenchResourceMenu)
-	}
-	if resource.Description == "" {
-		t.Fatal("resource has no description for the panel")
-	}
-	if resource.Handler != nil {
-		t.Fatal("resource carries a Handler; function pointers do not cross the ABI")
+	if len(withResources.Resources) != 0 {
+		t.Fatalf("register reply lists %d resources, want none: %+v", len(withResources.Resources), withResources.Resources)
 	}
 }
 

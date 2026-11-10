@@ -73,9 +73,7 @@ func maskPNG() []byte {
 
 // imgStub records every pipeline entry point the executor invokes and hands
 // back canned results. lastRefs is the references the drawing/codex route
-// received (the parsed edit input); lastProfile is the codex plan; lastCred
-// is the credential the route ran with (the workbench pins the credential
-// acquisition through it).
+// received (the parsed edit input); lastProfile is the codex plan.
 type imgStub struct {
 	acquireCalls  int
 	generateCalls int
@@ -85,7 +83,6 @@ type imgStub struct {
 	lastSize      string
 	lastQuality   string
 	lastProfile   upstream.Profile
-	lastCred      Credential
 	gotTokens     upstream.SentinelTokens
 
 	tokens   upstream.SentinelTokens
@@ -115,9 +112,8 @@ func stubImageSeams(t *testing.T, s *imgStub) {
 		s.acquireCalls++
 		return s.tokens, s.tokenErr
 	}
-	imageGenerate = func(_ context.Context, _ upstream.Upstream, cred Credential, tokens upstream.SentinelTokens, _ Config, prompt string, references []upstream.ReferenceImage, size, quality string, _ func(step string)) (upstream.ImageResult, error) {
+	imageGenerate = func(_ context.Context, _ upstream.Upstream, _ Credential, tokens upstream.SentinelTokens, _ Config, prompt string, references []upstream.ReferenceImage, size, quality string, _ func(step string)) (upstream.ImageResult, error) {
 		s.generateCalls++
-		s.lastCred = cred
 		s.gotTokens = tokens
 		s.lastRefs = references
 		s.lastPrompt = prompt
@@ -125,9 +121,8 @@ func stubImageSeams(t *testing.T, s *imgStub) {
 		s.lastQuality = quality
 		return s.genResult, s.genErr
 	}
-	imageGenerateCodex = func(_ context.Context, _ upstream.Upstream, cred Credential, profile upstream.Profile, prompt string, references []upstream.ReferenceImage, size, quality string) (upstream.ImageResult, error) {
+	imageGenerateCodex = func(_ context.Context, _ upstream.Upstream, _ Credential, profile upstream.Profile, prompt string, references []upstream.ReferenceImage, size, quality string) (upstream.ImageResult, error) {
 		s.codexCalls++
-		s.lastCred = cred
 		s.lastProfile = profile
 		s.lastRefs = references
 		s.lastPrompt = prompt

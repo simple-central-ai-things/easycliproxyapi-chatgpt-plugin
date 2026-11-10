@@ -446,8 +446,6 @@ func TestDocumentedErrorMatrixMatchesDispatch(t *testing.T) {
 			}
 		case "import":
 			return importMatrixError(t, code)
-		case "workbench":
-			return workbenchMatrixError(t, code)
 		case "error-map":
 			switch code {
 			case "invalid_token":
@@ -626,29 +624,4 @@ func importMatrixRefusal(t *testing.T, resp pluginapi.ManagementResponse) *plugi
 		HTTPStatus: resp.StatusCode,
 		Retryable:  body.Error.Retryable,
 	}
-}
-
-// workbenchMatrixError drives one workbench credential-acquisition refusal
-// offline against a scripted host store and returns the typed refusal it
-// answers. The workbench classes are store-leg refusals (no credential to
-// run the pipeline with), so the pin scripts the store, not the transport.
-func workbenchMatrixError(t *testing.T, code string) *pluginabi.Error {
-	t.Helper()
-	fake := newImportFakeCaller()
-	m := execManager(t, fake, "")
-	generate := []byte(`{"prompt":"a lighthouse"}`)
-	switch code {
-	case "workbench_credential_missing":
-		return importMatrixRefusal(t, handleManagement(t, m, http.MethodPost, workbenchRouteGenerate, generate))
-	case "workbench_credential_not_found":
-		fake.seedCredential(Credential{AccessToken: "at-matrix-wb", SourceType: importSourceType})
-		return importMatrixRefusal(t, handleManagement(t, m, http.MethodPost, workbenchRouteGenerate,
-			[]byte(`{"prompt":"a lighthouse","credential":"nope.json"}`)))
-	case "workbench_store_unavailable":
-		fake.listError = "store-denied"
-		return importMatrixRefusal(t, handleManagement(t, m, http.MethodPost, workbenchRouteGenerate, generate))
-	default:
-		t.Fatalf("matrix pin %q has no workbench fixture", code)
-	}
-	return nil // unreachable: every branch returns or fatals above
 }

@@ -3,7 +3,7 @@ package plugin
 // login_route_test.go pins the password re-login management route
 // (POST chatgpt-proxy/login/password): it exposes the SAME recovery core
 // the auth.login.password RPC runs (handlePasswordLogin — no fork of the
-// flow) through the F5/F6 management plumbing, so the panel gets a
+// flow) through the F5 management plumbing, so the panel gets a
 // built-in UI path to account recovery (the SDK's auth contract knows only
 // auth.login.start / auth.login.poll). The registration pin lives in
 // import_test.go's TestManagementRegisterListsImportRoutes (the exact route

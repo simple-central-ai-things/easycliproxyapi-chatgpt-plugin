@@ -220,20 +220,24 @@ type registrationResult struct {
 // an open string — the executor maps its spelling, ParseConfig does not.
 // The host-owned "enabled" and "priority" keys the host injects are
 // deliberately absent: the host owns them and the panel renders its own.
+// The Description text renders verbatim in the host's plugin-list JSON (the
+// default Go JSON encoding HTML-escapes quotes) and in the management
+// center panel: plain text only — no double quotes, no ampersand, no angle
+// brackets anywhere.
 var configFields = []pluginapi.ConfigField{
-	{Name: "model-prefix", Type: pluginapi.ConfigFieldTypeString, Description: "Prefix of every published model id (model-prefix/<model>). Default: \"chatgpt-proxy\"."},
-	{Name: "image-model-name", Type: pluginapi.ConfigFieldTypeString, Description: "Base name of the published web-drawing image model. Default: \"gpt-image-2-proxy\"."},
-	{Name: "codex-image-model-name", Type: pluginapi.ConfigFieldTypeString, Description: "Base name of the published codex image model (plus/pro/team plans). Default: \"codex-gpt-image-2\"."},
-	{Name: "drawing-upstream-model", Type: pluginapi.ConfigFieldTypeString, Description: "Upstream model used for web-drawing image turns. Default: \"gpt-5-5\"."},
-	{Name: "thinking-effort", Type: pluginapi.ConfigFieldTypeString, Description: "Thinking effort applied to text turns; open string, the executor maps it to the upstream spelling. Default: \"auto\"."},
+	{Name: "model-prefix", Type: pluginapi.ConfigFieldTypeString, Description: "Prefix of every published model id; the id is the prefix followed by the model base name. Default: chatgpt-proxy."},
+	{Name: "image-model-name", Type: pluginapi.ConfigFieldTypeString, Description: "Base name of the published web-drawing image model. Default: gpt-image-2-proxy."},
+	{Name: "codex-image-model-name", Type: pluginapi.ConfigFieldTypeString, Description: "Base name of the published codex image model (plus/pro/team plans). Default: codex-gpt-image-2."},
+	{Name: "drawing-upstream-model", Type: pluginapi.ConfigFieldTypeString, Description: "Upstream model used for web-drawing image turns. Default: gpt-5-5."},
+	{Name: "thinking-effort", Type: pluginapi.ConfigFieldTypeString, Description: "Thinking effort applied to text turns; open string, the executor maps it to the upstream spelling. Default: auto."},
 	{Name: "base-url", Type: pluginapi.ConfigFieldTypeString, Description: "Reserved; image responses are always inline b64_json regardless of this value. Default: empty."},
 	{Name: "message-as-error", Type: pluginapi.ConfigFieldTypeBoolean, Description: "True surfaces a drawing turn that replies with prose as an error instead of a silent 200. Default: true."},
 	{Name: "image-poll-timeout-secs", Type: pluginapi.ConfigFieldTypeInteger, Description: "Seconds to wait for a web-drawing image turn before failing. Default: 120."},
 	{Name: "image-poll-interval-secs", Type: pluginapi.ConfigFieldTypeInteger, Description: "Seconds between image-turn poll attempts; must not exceed image-poll-timeout-secs. Default: 10."},
 	{Name: "request-timeout-secs", Type: pluginapi.ConfigFieldTypeInteger, Description: "Seconds for the overall upstream request budget of a turn. Default: 600."},
-	{Name: "tls-mode", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{"stdlib", "utls"}, Description: "TLS client for the direct upstream fallback leg: stdlib (Go crypto/tls) or utls (browser-like fingerprint). Default: \"stdlib\"."},
+	{Name: "tls-mode", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{"stdlib", "utls"}, Description: "TLS client for the direct upstream fallback leg: stdlib (Go crypto/tls) or utls (browser-like fingerprint). Default: stdlib."},
 	{Name: "retry-401-refresh", Type: pluginapi.ConfigFieldTypeBoolean, Description: "True refreshes the credential once and retries a turn that fails with 401. Default: true."},
-	{Name: "search-upstream-model", Type: pluginapi.ConfigFieldTypeString, Description: "Upstream model used for web-search turns. Default: \"gpt-5-5\"."},
+	{Name: "search-upstream-model", Type: pluginapi.ConfigFieldTypeString, Description: "Upstream model used for web-search turns. Default: gpt-5-5."},
 	{Name: "search-timeout-secs", Type: pluginapi.ConfigFieldTypeInteger, Description: "Seconds to wait for a web-search result before failing. Default: 300."},
 	{Name: "search-poll-interval-secs", Type: pluginapi.ConfigFieldTypeInteger, Description: "Seconds between search-result poll attempts; must not exceed search-timeout-secs. Default: 3."},
 }

@@ -72,12 +72,10 @@ internal/plugin/
                               recovery), persisted via host.auth.save on
                               success
   management.go               host Management API plumbing:
-                              management.register (route + resource list,
-                              no handler crosses the ABI) + management.handle
+                              management.register (route list, no handler
+                              crosses the ABI) + management.handle
                               (exact-path router, 404/405 typed bodies)
-                              for the import + password-recovery +
-                              workbench surfaces (the GET resource path
-                              arrives full-path and un-normalized)
+                              for the import + password-recovery surfaces
   import.go                   F5 account imports: CPA codex export (file +
                               remote list/download) and sub2api admin
                               (login + paged accounts + accounts/data),
@@ -85,17 +83,6 @@ internal/plugin/
                               via host.auth.list/get, save through
                               saveCredential (host.auth.save), inline
                               {added, skipped, errors} summary
-  workbench.go                F6 drawing workbench: the one browser
-                              resource (the embedded data-free shell) +
-                              the generate/edit/models management routes
-                              driving the existing image pipeline
-                              (credential acquired via host.auth.list/get,
-                              the import's knownAccessTokens pattern;
-                              n 1..4 reuses validateImageCount; synchronous
-                              turns, client-side history — see README)
-  workbench_shell.html        the single self-contained workbench page
-                              (inline CSS/JS, DATA-FREE — pinned by test);
-                              go:embed, served byte-exact, no build step
   password_sentinel.go        the auth-flow sentinel: FNV-1a-32 PoW solve +
                               sentinel/req acquisition (distinct from the
                               conversation-flow sentinel in upstream/;
@@ -180,8 +167,7 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   `model_provider`, `executor` (model scope `oauth`, formats `openai` +
   `openai-image` + `openai-response` + `claude` in and out),
   `quota_provider`, `management_api` (turns on the host Management API for
-  the import routes + the password-recovery route + the drawing workbench
-  surface).
+  the import routes + the password-recovery route).
 - Provider identifiers: `auth.identifier`, `executor.identifier` and
   `quota.identifier` all return `{identifier:"chatgpt-proxy"}`.
 - Host config block (EasyCLI `config.yaml`):

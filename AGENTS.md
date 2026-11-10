@@ -64,14 +64,20 @@ internal/plugin/
   password_login.go           auth.login.password: synchronous password
                               re-login (account recovery) — authorize
                               bootstrap + verify + exchange, stored like
-                              the browser login (source_type "password")
+                              the browser login (source_type "password");
+                              ALSO exposed as the POST
+                              chatgpt-proxy/login/password management
+                              route (handleLoginPasswordRoute — same core,
+                              panel has no auth.login.start/poll path to
+                              recovery), persisted via host.auth.save on
+                              success
   management.go               host Management API plumbing:
                               management.register (route + resource list,
                               no handler crosses the ABI) + management.handle
                               (exact-path router, 404/405 typed bodies)
-                              for the import + workbench surfaces (the GET
-                              resource path arrives full-path and un-
-                              normalized)
+                              for the import + password-recovery +
+                              workbench surfaces (the GET resource path
+                              arrives full-path and un-normalized)
   import.go                   F5 account imports: CPA codex export (file +
                               remote list/download) and sub2api admin
                               (login + paged accounts + accounts/data),
@@ -174,7 +180,8 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   `model_provider`, `executor` (model scope `oauth`, formats `openai` +
   `openai-image` + `openai-response` + `claude` in and out),
   `quota_provider`, `management_api` (turns on the host Management API for
-  the import routes + the drawing workbench surface).
+  the import routes + the password-recovery route + the drawing workbench
+  surface).
 - Provider identifiers: `auth.identifier`, `executor.identifier` and
   `quota.identifier` all return `{identifier:"chatgpt-proxy"}`.
 - Host config block (EasyCLI `config.yaml`):

@@ -1,8 +1,8 @@
 package plugin
 
-// Management API plumbing (F5+F6): the import surface (import.go) and the
-// drawing workbench (workbench.go) are exposed through the host's
-// Management API. The host invokes management.register once at startup; the
+// Management API plumbing (F5+F6): the import surface (import.go), the
+// password recovery route (password_login.go) and the drawing workbench
+// (workbench.go) are exposed through the host's Management API. The host invokes management.register once at startup; the
 // reply lists the plugin-owned routes by method + path + description ONLY —
 // the SDK's Handler field is a Go function pointer and does not cross the
 // ABI, and the host's RPC adapter attaches itself as the callback target.
@@ -110,8 +110,8 @@ type managementRouteSpec struct {
 }
 
 // managementRouteSpecs is the complete management route set (import.go +
-// workbench.go). The host registers each (METHOD, fullPath) pair exactly;
-// anything not listed never reaches the plugin.
+// password_login.go + workbench.go). The host registers each (METHOD,
+// fullPath) pair exactly; anything not listed never reaches the plugin.
 func managementRouteSpecs() []managementRouteSpec {
 	return []managementRouteSpec{
 		{
@@ -143,6 +143,12 @@ func managementRouteSpecs() []managementRouteSpec {
 			path:        importRouteSub2api,
 			description: "Import selected accounts from a sub2api admin server (body: base_url + email + password + accounts)",
 			handle:      (*Manager).handleImportSub2api,
+		},
+		{
+			method:      http.MethodPost,
+			path:        loginRoutePassword,
+			description: "Recover a ChatGPT account via password re-login (body: email + password) — the auth.login.password core",
+			handle:      (*Manager).handleLoginPasswordRoute,
 		},
 		{
 			method:      http.MethodPost,
@@ -222,9 +228,9 @@ func normalizeManagementPath(raw string) string {
 }
 
 // handleManagementRegister implements management.register: it replies with
-// the exact management route set (import.go + workbench.go) and the one
-// browser resource — method + path + description only (no handler to cross
-// the ABI, no Menu label on a management route). The resource is registered
+// the exact management route set (import.go + password_login.go +
+// workbench.go) and the one browser resource — method + path + description
+// only (no handler to cross the ABI, no Menu label on a management route). The resource is registered
 // by its relative path under /v0/resource/plugins/<pluginID>/ (the host
 // resolves it); its Menu is what makes it browser-navigable.
 func (m *Manager) handleManagementRegister(request []byte) ([]byte, error) {

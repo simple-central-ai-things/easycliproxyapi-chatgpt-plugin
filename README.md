@@ -309,6 +309,42 @@ the code.
     `import_payload_invalid` (400 inline body / 502 remote payload shape),
     `import_save_failed` (500 retryable, the host credential store
     refused).
+- Account recovery (host Management API route): `POST chatgpt-proxy/login/password`
+  (under `/v0/management/`) exposes the SAME recovery core the
+  `auth.login.password` RPC runs — `handlePasswordLogin`, no fork of the
+  flow — because the SDK's auth contract knows only
+  `auth.login.start`/`auth.login.poll`, so the panel had no built-in UI
+  path to recovery. The RPC itself stays unchanged; both surfaces share
+  the core.
+  - Request body: `{email, password}` (the RPC's PascalCase spelling is
+    accepted too — the route merges both into the core's own request
+    type). Missing/blank email or password answers the core's fail-closed
+    typed `invalid_request` 400 BEFORE any network call.
+  - Response: `200` with the poll response shape — `status` success/error
+    + the `auth` storage record on success (an account-verification
+    outcome travels IN the body, exactly like the RPC) — or a typed
+    `{error:{code,message,retryable}}` body with the status from the typed
+    error. The error classes are the password re-login ones already in the
+    error matrix (`invalid_password` 401, `unsupported_region` 403,
+    `login_state_invalid` 400 retryable, `password_verify_failed` 502
+    retryable, `need_verification_code` 403, `no_auth_code` 502 retryable,
+    `sentinel_pow_failed` 502 retryable, `rate_limit_exceeded` 429
+    retryable, plus `invalid_request` 400 and the core's generic
+    `login_failed` 500/502) — no new classes.
+  - Persistence: on success the route saves the recovered credential
+    itself through `host.auth.save` (a `management.handle` reply is served
+    as-is by the host — there is no `auth.login.poll` persistence
+    contract), with the stable-hash file name and `source_type:
+    "password"`, so `auth.parse`, `auth.refresh`, the executor
+    refresh-retry and quota work on it unchanged; a store refusal answers
+    a typed retryable `login_failed` 500 (the recovery succeeded, only
+    persistence was refused — retry the same route).
+  - Secret hygiene: the password crosses the ABI only as the route body
+    input and appears ONLY in the outbound verify body — never in the
+    response envelope, an error message, the saved credential, or any
+    other outbound call; verify refusals answer the FIXED typed messages
+    and never echo the upstream body (canary-pinned by
+    `login_route_test.go`, extending the F4 core hygiene tests).
 - Drawing workbench (plugin-owned image console, F6): the registration
   reply also carries ONE browser resource — the workbench console page —
   plus three management routes that drive the existing openai-image
@@ -547,7 +583,13 @@ the code.
   never echo the upstream body, `need_verification_code` marks an
   email-OTP account that headless login cannot finish, and
   `sentinel_pow_failed` is the PoW iteration cap (retryable — a fresh
-  challenge usually solves). The import codes (`import_invalid_request` …
+  challenge usually solves). The `POST chatgpt-proxy/login/password`
+recovery route answers these SAME classes as typed management bodies
+(`{error:{code,message,retryable}}` with the status from the typed error —
+see Account recovery above): it reuses the core's validation
+(`invalid_request` 400) and the core's generic `login_failed` (500 retryable
+store refusal / 502 transport-family) rather than defining new ones. The
+import codes (`import_invalid_request` …
   `import_save_failed`) come from the Management API import routes:
   `import_payload_invalid` answers 400 for an inline export that carries
   no access token and 502 for a remote payload that misses the expected

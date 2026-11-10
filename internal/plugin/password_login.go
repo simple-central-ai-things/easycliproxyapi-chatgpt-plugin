@@ -34,12 +34,119 @@ import (
 	"strings"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 // methodAuthLoginPassword is the RPC the host/panel invokes for password
 // recovery. It is plugin-defined (the SDK carries no wire type for it yet)
 // and dispatched by name like every other method.
 const methodAuthLoginPassword = "auth.login.password"
+
+// loginRoutePassword is the exact-path management route (relative under
+// /v0/management/) that exposes the SAME recovery core this RPC runs. The
+// SDK's auth contract only knows auth.login.start / auth.login.poll, so the
+// panel had no built-in UI path to recovery; the F5/F6 management plumbing
+// (management.go) gives it one. The RPC itself stays unchanged — both
+// surfaces share handlePasswordLogin, no fork of the flow.
+const loginRoutePassword = providerKey + "/login/password"
+
+// loginRouteBody is the panel wire spelling of the recovery body: lowercase
+// {email, password}, the management-route body convention (import.go,
+// workbench.go). The RPC's PascalCase spelling (passwordLoginRequest) is
+// accepted too — both merge into the core's own request type.
+type loginRouteBody struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// handleLoginPasswordRoute implements POST chatgpt-proxy/login/password: it
+// merges the route body into the RPC's own request type (reusing its
+// fields) and runs handlePasswordLogin — the SAME core the
+// auth.login.password RPC runs. The core's fail-closed input validation
+// then answers missing/blank email or password as the typed invalid_request
+// 400 BEFORE any network call; the core's typed errors become
+// {error:{code,message,retryable}} bodies with the status from the typed
+// error, and the poll response shape travels as 200 exactly like the RPC.
+//
+// On success the route persists the recovered credential itself
+// (host.auth.save, the import's store path): a management.handle reply is
+// served as-is by the host, so there is no auth.login.poll persistence
+// contract to rely on. A store refusal answers a typed retryable
+// login_failed 500 — the recovery succeeded, only persistence was refused,
+// so the operator retries the same route.
+//
+// SECRET HYGIENE: the password crosses the ABI only as this route's body
+// input and appears ONLY in the outbound verify body — never in the
+// response envelope, an error message, the saved credential, or any other
+// outbound call (canary-pinned by login_route_test.go).
+func (m *Manager) handleLoginPasswordRoute(req managementHandleRequest) pluginapi.ManagementResponse {
+	var panel loginRouteBody
+	if err := json.Unmarshal(req.Body, &panel); err != nil {
+		// Not a JSON object: hand the raw bytes to the core, which answers
+		// its own typed invalid_request 400 (fail-closed, no network).
+		return loginRouteManagementResponse(m, req.Body)
+	}
+	var rpc passwordLoginRequest
+	_ = json.Unmarshal(req.Body, &rpc) // the RPC wire spelling, when used
+	if rpc.Email == "" {
+		rpc.Email = panel.Email
+	}
+	if rpc.Password == "" {
+		rpc.Password = panel.Password
+	}
+	rpc.HostCallbackID = req.HostCallbackID // the envelope owns the transport scope
+	raw, _ := json.Marshal(rpc)
+	return loginRouteManagementResponse(m, raw)
+}
+
+// loginRouteManagementResponse runs the shared core and converts its
+// envelope to a management response with an explicit status. Every core
+// failure is a typed error envelope (the envelope contract — no Go errors);
+// a Go error or undecodable envelope is a plugin_error refusal.
+func loginRouteManagementResponse(m *Manager, raw []byte) pluginapi.ManagementResponse {
+	envelope, err := m.handlePasswordLogin(raw)
+	if err != nil {
+		return loginRouteInternalError()
+	}
+	var env pluginabi.Envelope
+	if err := json.Unmarshal(envelope, &env); err != nil {
+		return loginRouteInternalError()
+	}
+	if env.Error != nil {
+		status := env.Error.StatusCode()
+		if status == 0 {
+			status = http.StatusInternalServerError // the host's default for an unset status
+		}
+		return managementError(status, env.Error.Code, env.Error.Message, env.Error.Retryable)
+	}
+	var out pluginapi.AuthLoginPollResponse
+	if err := json.Unmarshal(env.Result, &out); err != nil {
+		return loginRouteInternalError()
+	}
+	if out.Status != pluginapi.AuthLoginStatusSuccess {
+		// The account-verification outcome travels IN the response exactly
+		// like the RPC does (login.go): 200 with the poll shape.
+		return managementResponseJSON(http.StatusOK, out)
+	}
+	cred, err := FromStorageJSON(out.Auth.StorageJSON)
+	if err != nil || strings.TrimSpace(out.Auth.FileName) == "" {
+		return loginRouteInternalError()
+	}
+	if err := m.saveCredential(out.Auth.FileName, cred); err != nil {
+		// Retryable: the recovery itself succeeded, only persistence was
+		// refused — the operator can retry the same route.
+		return managementError(http.StatusInternalServerError, "login_failed",
+			"the host credential store refused the recovered account", true)
+	}
+	return managementResponseJSON(http.StatusOK, out)
+}
+
+// loginRouteInternalError is the typed refusal for a route-side conversion
+// failure (unreachable in practice: the core answers envelopes only).
+func loginRouteInternalError() pluginapi.ManagementResponse {
+	return managementError(http.StatusInternalServerError, "plugin_error",
+		"internal error during password login", false)
+}
 
 const (
 	// passwordVerifyURL is the email+password verify endpoint

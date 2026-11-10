@@ -225,11 +225,11 @@ func TestRegisterEnvelopeManagementAPI(t *testing.T) {
 }
 
 // TestManagementRegisterListsImportRoutes pins the management.register
-// reply: exactly the five import routes plus the three workbench routes, by
-// method + path + description — no handler (it cannot cross the ABI), no Menu
-// on a management route (a Menu-tagged GET would be diverted to the
-// unauthenticated resource surface) — and exactly the one workbench browser
-// resource (the data-free HTML shell).
+// reply: exactly the five import routes, the one password-recovery route and
+// the three workbench routes, by method + path + description — no handler
+// (it cannot cross the ABI), no Menu on a management route (a Menu-tagged
+// GET would be diverted to the unauthenticated resource surface) — and
+// exactly the one workbench browser resource (the data-free HTML shell).
 func TestManagementRegisterListsImportRoutes(t *testing.T) {
 	m := newTestManager(t)
 	body, _ := json.Marshal(managementRegistrationRequest{BasePath: "/v0/management"})
@@ -252,6 +252,7 @@ func TestManagementRegisterListsImportRoutes(t *testing.T) {
 		importRouteCpaRemote:       http.MethodPost,
 		importRouteSub2apiAccounts: http.MethodGet,
 		importRouteSub2api:         http.MethodPost,
+		loginRoutePassword:         http.MethodPost,
 		workbenchRouteGenerate:     http.MethodPost,
 		workbenchRouteEdit:         http.MethodPost,
 		workbenchRouteModels:       http.MethodGet,

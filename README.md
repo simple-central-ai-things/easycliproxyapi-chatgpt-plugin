@@ -33,8 +33,11 @@ and `claude` (Anthropic Messages) formats (streaming and non-streaming), web
 search with cited answers, the `openai-image` executor surface (image
 generation and editing routed by model base name to the web-drawing and
 codex pipelines), CPA / sub2api account imports as host Management API
-routes, and the drawing workbench (a browser resource page driving the image
-pipeline). Remaining gaps are in `RELEASE_NOTES.md`.
+routes, a `POST chatgpt-proxy/login/password` account-recovery management
+route (the same core as the `auth.login.password` RPC), the drawing workbench
+(a browser resource page driving the image pipeline), and the registration
+`ConfigFields` (every tunable config key advertised so the host's
+plugin-settings UI renders them). Remaining gaps are in `RELEASE_NOTES.md`.
 
 ## Layout
 
@@ -97,7 +100,7 @@ the exception: it is pinned one-directionally, each documented row against
 the code.
 
 - Plugin identity (pinned by `internal/plugin/plugin_test.go`):
-  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.0`, provider key
+  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.1`, provider key
   `chatgpt-proxy`, `GitHubRepository` = this repo (the host `validPlugin`
   gate rejects an empty value). The `registry.json` store entry carries the
   same id, version and repository URL.

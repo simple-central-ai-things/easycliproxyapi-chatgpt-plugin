@@ -2,6 +2,31 @@
 
 This file records user-facing release summaries.
 
+## v0.2.1 — 2026-11-10 (panel surfaces: config fields + account-recovery route)
+
+Two operator-facing additions on top of v0.2.0, so the host management panel
+can drive surfaces that previously required hand-editing config or had no UI
+path:
+
+- **Registration `ConfigFields`.** The registration now advertises one
+  `ConfigField` for every tunable config key `ParseConfig` accepts (15
+  fields; the host-owned `enabled`/`priority` are excluded). The host's
+  plugin-settings UI renders them, so operators set `tls-mode`, the search
+  timeouts, `message-as-error`, etc. in the panel instead of editing the
+  `plugins.configs.easycliproxyapi-chatgpt-provider` YAML block. `tls-mode`
+  is the only enum field (`["stdlib","utls"]`); the rest are typed
+  string/integer/boolean to match the validator. A new docs-pin test holds
+  the advertised set equal to the README config matrix (both directions).
+- **Account-recovery management route.** `POST chatgpt-proxy/login/password`
+  (under `/v0/management/`) triggers the same password-recovery core as the
+  `auth.login.password` RPC — sentinel PoW + PKCE + `password/verify` +
+  `oauth/token` — so the panel can recover an account whose refresh token
+  died. Body is `{email, password}` (lowercase or PascalCase); success is the
+  poll-shaped reply with the recovered record persisted via `host.auth.save`
+  (same stable-hash file name the RPC path converges on), failure is the typed
+  error with the password never echoed. The password crosses the ABI only as
+  the request input.
+
 ## v0.2.0 — 2026-11-09 (Phase 2: full reference feature parity)
 
 Second release of the chatgpt-proxy provider: the six Phase 2 features ported

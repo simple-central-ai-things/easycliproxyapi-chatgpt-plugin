@@ -120,9 +120,11 @@ Still operator-gated (they need credentials this repo must not hold):
   error class (non-email-OTP 2FA pages land in retryable `no_auth_code`,
   reference-faithful).
 - **Workbench follow-ups**: server-side persistent history (F6 keeps it
-  client-side, like the reference), and the host-panel surface for
-  `auth.login.password` (the RPC is plugin-defined; the panel menu entry is
-  a host follow-up).
+  client-side, like the reference).
+- Shipped in v0.2.1: the registration `ConfigFields` (the panel's
+  plugin-settings UI renders every tunable key) and the
+  `POST chatgpt-proxy/login/password` management route (the panel surface
+  for the `auth.login.password` recovery core).
 
 Also unchanged from v0.1.0: exact token counts are not available upstream
 (usage is a documented `bytes / 4` estimate).

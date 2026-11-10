@@ -317,6 +317,59 @@ func TestDocumentedConfigMatrixMatchesParseConfig(t *testing.T) {
 	}
 }
 
+// TestDocumentedConfigMatrixMatchesRegistrationFields pins the README config
+// matrix's key set to the registration's Metadata.ConfigFields in both
+// directions: the host panel's plugin-settings surface and the documented
+// contract must stay the same set (minus the host-owned enabled/priority),
+// so a new key in either place goes red. Each advertised field must also
+// carry a description, since that text is what the panel renders.
+func TestDocumentedConfigMatrixMatchesRegistrationFields(t *testing.T) {
+	reg := registerForMatrix(t, newTestManager(t))
+	advertised := map[string]bool{}
+	for _, f := range reg.Metadata.ConfigFields {
+		if advertised[f.Name] {
+			t.Fatalf("registration advertises config field %q twice", f.Name)
+		}
+		advertised[f.Name] = true
+		if f.Description == "" {
+			t.Fatalf("registration config field %q has no description for the panel", f.Name)
+		}
+		if f.Type == pluginapi.ConfigFieldTypeEnum && len(f.EnumValues) == 0 {
+			t.Fatalf("registration config field %q is an enum without enum values", f.Name)
+		}
+		if f.Type != pluginapi.ConfigFieldTypeEnum && len(f.EnumValues) != 0 {
+			t.Fatalf("registration config field %q carries enum values but type %q", f.Name, f.Type)
+		}
+	}
+	seen := map[string]bool{}
+	for _, row := range readMatrix(t, "config") {
+		if len(row) < 2 {
+			t.Fatalf("config matrix row has %d cells, want 2: %v", len(row), row)
+		}
+		key := unquoteCell(row[0])
+		if seen[key] {
+			t.Fatalf("config matrix documents %q twice", key)
+		}
+		seen[key] = true
+		if !advertised[key] {
+			t.Fatalf("config matrix documents key %q that registration does not advertise", key)
+		}
+	}
+	for key := range advertised {
+		if !seen[key] {
+			t.Fatalf("registration advertises config field %q the config matrix does not document", key)
+		}
+	}
+	if len(seen) != len(advertised) {
+		t.Fatalf("config matrix documents %d keys, registration advertises %d fields", len(seen), len(advertised))
+	}
+	for _, hostOwned := range []string{"enabled", "priority"} {
+		if advertised[hostOwned] {
+			t.Fatalf("registration advertises host-owned key %q: the host injects it", hostOwned)
+		}
+	}
+}
+
 // TestDocumentedErrorMatrixMatchesDispatch pins the error code matrix:
 // each documented row's code and HTTP status must be exactly what the
 // dispatcher (rows pinned by "dispatch") or the upstream error mapping

@@ -210,9 +210,38 @@ type registrationResult struct {
 	Capabilities  capabilities       `json:"capabilities"`
 }
 
+// configFields is the registration's Metadata.ConfigFields surface: one
+// field per plugin-owned key ParseConfig accepts (the README config matrix
+// pins the exact set, matrix_test.go), so the host panel's plugin-settings
+// UI renders every key instead of the operator hand-editing the
+// plugins.configs.<id> YAML block. Types mirror the parser: boolean keys →
+// boolean, *-secs keys → integer, tls-mode → enum (the only key validate
+// rejects outside its closed set), the rest → string. thinking-effort stays
+// an open string — the executor maps its spelling, ParseConfig does not.
+// The host-owned "enabled" and "priority" keys the host injects are
+// deliberately absent: the host owns them and the panel renders its own.
+var configFields = []pluginapi.ConfigField{
+	{Name: "model-prefix", Type: pluginapi.ConfigFieldTypeString, Description: "Prefix of every published model id (model-prefix/<model>). Default: \"chatgpt-proxy\"."},
+	{Name: "image-model-name", Type: pluginapi.ConfigFieldTypeString, Description: "Base name of the published web-drawing image model. Default: \"gpt-image-2-proxy\"."},
+	{Name: "codex-image-model-name", Type: pluginapi.ConfigFieldTypeString, Description: "Base name of the published codex image model (plus/pro/team plans). Default: \"codex-gpt-image-2\"."},
+	{Name: "drawing-upstream-model", Type: pluginapi.ConfigFieldTypeString, Description: "Upstream model used for web-drawing image turns. Default: \"gpt-5-5\"."},
+	{Name: "thinking-effort", Type: pluginapi.ConfigFieldTypeString, Description: "Thinking effort applied to text turns; open string, the executor maps it to the upstream spelling. Default: \"auto\"."},
+	{Name: "base-url", Type: pluginapi.ConfigFieldTypeString, Description: "Reserved; image responses are always inline b64_json regardless of this value. Default: empty."},
+	{Name: "message-as-error", Type: pluginapi.ConfigFieldTypeBoolean, Description: "True surfaces a drawing turn that replies with prose as an error instead of a silent 200. Default: true."},
+	{Name: "image-poll-timeout-secs", Type: pluginapi.ConfigFieldTypeInteger, Description: "Seconds to wait for a web-drawing image turn before failing. Default: 120."},
+	{Name: "image-poll-interval-secs", Type: pluginapi.ConfigFieldTypeInteger, Description: "Seconds between image-turn poll attempts; must not exceed image-poll-timeout-secs. Default: 10."},
+	{Name: "request-timeout-secs", Type: pluginapi.ConfigFieldTypeInteger, Description: "Seconds for the overall upstream request budget of a turn. Default: 600."},
+	{Name: "tls-mode", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{"stdlib", "utls"}, Description: "TLS client for the direct upstream fallback leg: stdlib (Go crypto/tls) or utls (browser-like fingerprint). Default: \"stdlib\"."},
+	{Name: "retry-401-refresh", Type: pluginapi.ConfigFieldTypeBoolean, Description: "True refreshes the credential once and retries a turn that fails with 401. Default: true."},
+	{Name: "search-upstream-model", Type: pluginapi.ConfigFieldTypeString, Description: "Upstream model used for web-search turns. Default: \"gpt-5-5\"."},
+	{Name: "search-timeout-secs", Type: pluginapi.ConfigFieldTypeInteger, Description: "Seconds to wait for a web-search result before failing. Default: 300."},
+	{Name: "search-poll-interval-secs", Type: pluginapi.ConfigFieldTypeInteger, Description: "Seconds between search-result poll attempts; must not exceed search-timeout-secs. Default: 3."},
+}
+
 // registrationEnvelope builds the success envelope for register/reconfigure:
 // schema_version echo, the pinned identity (with a non-empty GitHubRepository
-// for the host validPlugin gate), and the exact capability surface.
+// for the host validPlugin gate), the exact capability surface, and the
+// config-field surface the host panel renders as plugin settings.
 func registrationEnvelope() []byte {
 	formats := []string{"openai", "openai-image", responseFormat, claudeFormat}
 	return ok(registrationResult{
@@ -222,7 +251,7 @@ func registrationEnvelope() []byte {
 			Version:          pluginVersion,
 			Author:           pluginID,
 			GitHubRepository: githubRepo,
-			ConfigFields:     []pluginapi.ConfigField{},
+			ConfigFields:     configFields,
 		},
 		Capabilities: capabilities{
 			AuthProvider:          true,

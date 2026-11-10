@@ -50,6 +50,8 @@ internal/plugin/
                               identity constants (pluginID, providerKey,
                               pluginVersion, githubRepo), registration
                               envelope with the pinned capability surface
+                              + the configFields table advertised to the
+                              host panel's settings UI
   config.go / cred.go         aliases + wrappers into internal/model
   envelope.go                 ok / errEnvelope helpers with typed
                               Error{Code,Message,HTTPStatus,Retryable}
@@ -179,7 +181,11 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
   `plugins.configs.easycliproxyapi-chatgpt-provider` — keys and defaults per
   README Contracts. Parsing is fail-closed; unknown keys are rejected except
   the host-owned `enabled`/`priority`, which CLIProxyAPI v8 injects into
-  every plugin's config before registration (accepted, ignored).
+  every plugin's config before registration (accepted, ignored). Every
+  plugin-owned key is advertised in the registration's
+  `Metadata.ConfigFields`, so the host panel's plugin-settings UI renders
+  them (`enabled`/`priority` stay out — the host owns them); matrix_test.go
+  pins the advertised set to the README config matrix.
 - Model namespace: `chatgpt-proxy/<model>`; published image models
   `chatgpt-proxy/gpt-image-2-proxy` (web-drawing route) and
   `chatgpt-proxy/codex-gpt-image-2` (codex route). The `-proxy` suffix is

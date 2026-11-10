@@ -115,6 +115,37 @@ func TestRegisterEnvelope(t *testing.T) {
 	if strings.Join(caps.ExecutorOutputFormats, ",") != "openai,openai-image,openai-response,claude" {
 		t.Fatalf("executor_output_formats = %v, want [openai openai-image openai-response claude]", caps.ExecutorOutputFormats)
 	}
+
+	// ConfigFields: the host panel's plugin-settings UI renders whatever the
+	// registration advertises, so the surface must be non-empty, correctly
+	// typed, and carry enum values only for keys ParseConfig validates. The
+	// full key set is pinned against the README matrix in matrix_test.go.
+	fields := map[string]pluginapi.ConfigField{}
+	for _, f := range reg.Metadata.ConfigFields {
+		fields[f.Name] = f
+	}
+	if len(fields) == 0 {
+		t.Fatal("metadata.config_fields is empty: the host panel's plugin settings UI would render nothing")
+	}
+	if f := fields["model-prefix"]; f.Type != pluginapi.ConfigFieldTypeString {
+		t.Fatalf("model-prefix type = %q, want string", f.Type)
+	}
+	if f := fields["message-as-error"]; f.Type != pluginapi.ConfigFieldTypeBoolean {
+		t.Fatalf("message-as-error type = %q, want boolean", f.Type)
+	}
+	if f := fields["request-timeout-secs"]; f.Type != pluginapi.ConfigFieldTypeInteger {
+		t.Fatalf("request-timeout-secs type = %q, want integer", f.Type)
+	}
+	if f, ok := fields["tls-mode"]; !ok || f.Type != pluginapi.ConfigFieldTypeEnum {
+		t.Fatalf("tls-mode must be advertised as an enum (have %+v, ok=%v)", f, ok)
+	} else if len(f.EnumValues) != 2 || f.EnumValues[0] != "stdlib" || f.EnumValues[1] != "utls" {
+		t.Fatalf("tls-mode enum values = %v, want [stdlib utls]", f.EnumValues)
+	}
+	for _, hostOwned := range []string{"enabled", "priority"} {
+		if _, ok := fields[hostOwned]; ok {
+			t.Fatalf("host-owned key %q must not be advertised: the host injects it", hostOwned)
+		}
+	}
 }
 
 // TestIdentifiers pins the three capability identifiers: the provider key is

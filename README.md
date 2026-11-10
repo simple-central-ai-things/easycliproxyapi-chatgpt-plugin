@@ -162,7 +162,11 @@ the code.
 
   Config parsing is fail-closed and rejects unknown keys — except the
   host-owned `enabled` and `priority`, which CLIProxyAPI v8 injects into
-  every plugin's config before registration (accepted, ignored).
+  every plugin's config before registration (accepted, ignored). The
+  registration advertises exactly these keys as `Metadata.ConfigFields`,
+  so the host panel's plugin-settings UI renders them instead of the
+  operator hand-editing the block (`enabled`/`priority` stay out — the
+  host owns them).
 - Credential records (host auth files, `type: "chatgpt-proxy"`):
   `access_token`, `refresh_token`, `id_token`, `email`, `user_id`,
   `account_id`, `plan`, `source_type`, the `fp` fingerprint block

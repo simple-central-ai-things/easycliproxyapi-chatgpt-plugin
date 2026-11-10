@@ -158,7 +158,11 @@ formal standalone spike runs, not blockers.
 
 The Phase-2 `.so` was deployed to the live gateway (plugin registered at
 `version=0.2.0` in the startup log) and verified end-to-end against the live
-ChatGPT Plus credential, through the public gateway port:
+ChatGPT Plus credential, through the public gateway port. The deployed build
+includes the four Phase-2 review minors (`3aa37d2`: Responses image tool
+honors a bare `tool_choice`, sub2api single envelope unwrap, import token
+merge of flat + nested sets, search map-ordering doc note) — re-deployed and
+re-verified before the v0.2.0 tag moved to it:
 
 - **Responses API (`openai-response`):** `POST /v1/responses` → **HTTP 200**,
   the `response.completed` envelope (`object:"response"`, `id:"resp_<hex>"`,
@@ -184,6 +188,20 @@ ChatGPT Plus credential, through the public gateway port:
   `POST .../workbench/generate` (n=1, low quality) → **HTTP 200** in ~36 s,
   one inline `b64_json` entry with valid PNG magic; `POST .../workbench/edit`
   with a data-URL reference → **HTTP 200**, one valid PNG.
+- **Streaming formats:** `POST /v1/responses` with `stream:true` → **HTTP
+  200**, the full Responses SSE sequence — `response.created` →
+  `response.output_item.added` → `response.output_text.delta` →
+  `response.output_text.done` → `response.output_item.done` →
+  `response.completed` (with usage). The Responses stream is framed as bare
+  `data:` lines carrying the event `type` in the payload (the offline-pinned
+  contract; no `event:` lines and no `[DONE]`). `POST /v1/messages` with
+  `stream:true` → **HTTP 200**, the Anthropic sequence — `message_start` →
+  `content_block_start` → `content_block_delta` → `content_block_stop` →
+  `message_delta` → `message_stop`, framed `event:/data:`, no `[DONE]`.
+- **Responses `image_generation` tool:** `POST /v1/responses` carrying
+  `tools:[{"type":"image_generation"}]` → **HTTP 200**, an
+  `image_generation_call` output item with a ~1.5 MB inline base64 `result`
+  — the tool routes through the live image pipeline.
 - **openai regression:** `POST /v1/chat/completions` still → **HTTP 200**
   chat.completion envelope.
 

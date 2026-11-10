@@ -91,12 +91,16 @@ spike, live executor smoke, SCPM gateway integration) — see
 `PROVENANCE.md` for the verdict ledger.
 
 After the v0.2.0 deploy, `PROVENANCE.md` records a live serving pass
-(2026-11-09): one `/v1/responses` turn, one `/v1/messages` turn, a
-web-search turn returning cited sources, the workbench resource page +
-models + generate + edit rounds (all against the live ChatGPT Plus
-credential, through the public gateway port), and the import routes
-proven registered + dispatching (typed validation / remote-failure
-responses, no credential written).
+(2026-11-09/10): one `/v1/responses` turn plus its streaming SSE sequence,
+one `/v1/messages` turn plus its streaming SSE sequence, a Responses
+`image_generation` tool round (an `image_generation_call` item from the
+live image pipeline), a web-search turn returning cited sources, the
+workbench resource page + models + generate + edit rounds (all against the
+live ChatGPT Plus credential, through the public gateway port), and the
+import routes proven registered + dispatching (typed validation /
+remote-failure responses, no credential written). The pass includes the
+four Phase-2 review minors (`3aa37d2`), re-deployed and re-verified before
+the tag moved.
 
 Still operator-gated (they need credentials this repo must not hold):
 
@@ -119,9 +123,6 @@ Still operator-gated (they need credentials this repo must not hold):
   client-side, like the reference), and the host-panel surface for
   `auth.login.password` (the RPC is plugin-defined; the panel menu entry is
   a host follow-up).
-- The Responses `image_generation` tool detection honors the `tools` array
-  but not a bare `tool_choice.type=="image_generation"` (real clients list
-  the tool in `tools`; low-impact edge, tracked).
 
 Also unchanged from v0.1.0: exact token counts are not available upstream
 (usage is a documented `bytes / 4` estimate).

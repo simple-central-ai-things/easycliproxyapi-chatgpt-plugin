@@ -25,7 +25,7 @@ each ChatGPT consumer account into a credential the EasyCLI host can manage
 through the gateway's existing model routing. No extra container, no extra
 published port: the plugin loads inside the host process.
 
-The v0.2.0 surface: the credential lifecycle (auth parse/refresh, browser
+The current surface: the credential lifecycle (auth parse/refresh, browser
 OAuth login, password re-login / account recovery, with the plan persisted at
 login and refresh), the per-credential model catalog, the quota cards, the
 text conversation executor in the `openai`, `openai-response` (Responses API)
@@ -96,7 +96,7 @@ the exception: it is pinned one-directionally, each documented row against
 the code.
 
 - Plugin identity (pinned by `internal/plugin/plugin_test.go`):
-  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.1`, provider key
+  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.2`, provider key
   `chatgpt-proxy`, `GitHubRepository` = this repo (the host `validPlugin`
   gate rejects an empty value). The `registry.json` store entry carries the
   same id, version and repository URL.

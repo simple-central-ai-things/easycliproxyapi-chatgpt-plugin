@@ -2,6 +2,28 @@
 
 This file records user-facing release summaries.
 
+## v0.2.2 — 2026-11-10 (removed the drawing workbench; HTML-safe settings text)
+
+Operator decision: the host is a model-serving proxy, so the plugin no longer
+ships a browser web console. Two changes:
+
+- **Drawing workbench removed.** The v0.2.0 workbench resource page
+ (`/v0/resource/plugins/<plugin-id>/chatgpt-proxy/workbench`) and its
+ `generate` / `edit` / `models` management routes are gone. The image
+ EXECUTOR stays — `/v1/images/generations` and `/v1/images/edits` (the
+ `openai-image` format, both published image models) still route by model base
+ name to the web-drawing and codex pipelines and return inline `b64_json`.
+ That is the model-serving surface; the workbench was an out-of-place UI on
+ top of it. The management route-set pin now asserts exactly the 5 import
+ routes + the account-recovery route and zero browser resources.
+- **HTML-safe panel settings descriptions.** The 15 registration `ConfigFields`
+ descriptions no longer contain quote characters, which the host's JSON
+ encoder HTML-escaped to `&#34;` and the panel rendered verbatim (garbled).
+ They are now plain text (defaults and units retained), so the panel's
+ plugin-settings UI renders them cleanly. (The field LABELS are the config
+ key names — the host SDK's `ConfigField` has no separate title field — so
+ names stay kebab-case by contract.)
+
 ## v0.2.1 — 2026-11-10 (panel surfaces: config fields + account-recovery route)
 
 Two operator-facing additions on top of v0.2.0, so the host management panel

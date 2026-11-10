@@ -119,12 +119,14 @@ Still operator-gated (they need credentials this repo must not hold):
   `api_key` auth alternative and its groups listing, and a dedicated 2FA
   error class (non-email-OTP 2FA pages land in retryable `no_auth_code`,
   reference-faithful).
-- **Workbench follow-ups**: server-side persistent history (F6 keeps it
-  client-side, like the reference).
 - Shipped in v0.2.1: the registration `ConfigFields` (the panel's
   plugin-settings UI renders every tunable key) and the
   `POST chatgpt-proxy/login/password` management route (the panel surface
   for the `auth.login.password` recovery core).
+- Removed in v0.2.2: the drawing workbench (the browser console page + its
+  generate/edit/models routes) — out of place for a model-serving host; the
+  image executor (`openai-image`) remains. The panel settings descriptions
+  are also HTML-safe now (no more `&#34;` garble).
 
 Also unchanged from v0.1.0: exact token counts are not available upstream
 (usage is a documented `bytes / 4` estimate).

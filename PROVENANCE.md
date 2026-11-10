@@ -227,3 +227,22 @@ verified through the public gateway port with the management key:
   login against the account; no failed attempt was made during
   verification). A `GET` on the POST-only route answers the host's own 404
   (the host registers exact method+path pairs) — expected, not a defect.
+
+## v0.2.2 panel-cleanup live verification (2026-11-10)
+
+The v0.2.2 `.so` (workbench removed + HTML-safe settings descriptions) was
+deployed together with the SCPM Caddyfile change that dropped the now-unused
+`/v0/resource/plugins/*` proxy block (SCPM `d8bc576`). Startup log:
+`plugin registered ... version=0.2.2`. Verified through the public gateway
+port:
+
+- **Workbench gone:** the resource page and all three workbench management
+  routes answer 404 (the host's own 404 — the routes are no longer
+  registered).
+- **Settings clean:** `GET /v0/management/plugins` → the plugin entry
+  carries the 15 `config_fields`, zero menus, and no HTML-escaped entities
+  in the descriptions (the `&#34;` garble from v0.2.1 is gone).
+- **Kept surfaces intact:** the recovery route and an import route still
+  answer their typed 400 validation errors; `POST /v1/images/generations`
+  (`chatgpt-proxy/gpt-image-2-proxy`, n=1, low quality) → **HTTP 200**, one
+  inline `b64_json` (~1.5 MB) — the image executor regression check.

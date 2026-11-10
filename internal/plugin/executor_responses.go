@@ -144,6 +144,7 @@ type responsesShapePayload struct {
 	Input           any                 `json:"input"`
 	Instructions    string              `json:"instructions"`
 	Tools           json.RawMessage     `json:"tools"`
+	ToolChoice      json.RawMessage     `json:"tool_choice"`
 	Reasoning       *responsesReasoning `json:"reasoning"`
 	ThinkingEffort  *string             `json:"thinking_effort"`
 	ReasoningEffort *string             `json:"reasoning_effort"`
@@ -456,20 +457,34 @@ func hasNonSystemMessage(messages []upstream.ConversationMessage) bool {
 // ---------------------------------------------------------------------------
 
 // responsesImageTool returns the request's image_generation tool definition
-// (the reference's response_image_tool, lines 78-82). Its presence — not
-// any payload field — decides the route before anything else parses (the
-// reference's is_text_response_request).
+// (the reference's response_image_tool, lines 78-82) and whether the request
+// routes to the image pipeline (the reference's has_response_image_generation
+// tool, lines 292-299): the tools array is scanned first, and a BARE
+// tool_choice {"type":"image_generation"} with no tools array also routes —
+// in that case the definition is empty and the pipeline defaults apply.
+// Presence — not any other payload field — decides the route before
+// anything else parses (the reference's is_text_response_request).
 func responsesImageTool(payload responsesShapePayload) (map[string]any, bool) {
-	if len(payload.Tools) == 0 || string(payload.Tools) == "null" {
-		return nil, false
+	if len(payload.Tools) != 0 && string(payload.Tools) != "null" {
+		var tools []map[string]any
+		if err := json.Unmarshal(payload.Tools, &tools); err == nil {
+			for _, tool := range tools {
+				if strings.TrimSpace(jsonStringOr(tool["type"])) == "image_generation" {
+					return tool, true
+				}
+			}
+		}
+		// A non-array / malformed tools carries no image tool (the
+		// reference's isinstance guard); it refuses later in shapeTools
+		// on the text path.
 	}
-	var tools []map[string]any
-	if err := json.Unmarshal(payload.Tools, &tools); err != nil {
-		return nil, false // malformed tools refuse later in shapeTools
-	}
-	for _, tool := range tools {
-		if strings.TrimSpace(jsonStringOr(tool["type"])) == "image_generation" {
-			return tool, true
+	if len(payload.ToolChoice) != 0 && string(payload.ToolChoice) != "null" {
+		var choice struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(payload.ToolChoice, &choice); err == nil &&
+			strings.TrimSpace(choice.Type) == "image_generation" {
+			return map[string]any{}, true
 		}
 	}
 	return nil, false

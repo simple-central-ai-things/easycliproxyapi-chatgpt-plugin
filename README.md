@@ -433,7 +433,9 @@ the code.
   `response.output_text.delta`* → `response.output_text.done` →
   `response.output_item.done` → `response.completed` (with usage) — and
   NO `data: [DONE]` sentinel; `response.completed` is the terminator.
-  An `image_generation` tool routes the request to the image pipeline
+  An `image_generation` tool (or a bare `tool_choice` of type
+  `image_generation`, as the reference's routing predicate honors) routes
+  the request to the image pipeline
   (prompt from `input_text` parts and user messages, the LAST input image
   as reference, the tool's `size` / `quality` riding through, a published
   text model on the drawing route) and answers with `ig_<n>`

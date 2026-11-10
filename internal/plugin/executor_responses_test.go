@@ -719,6 +719,53 @@ func TestResponsesImageToolMissingPrompt(t *testing.T) {
 	}
 }
 
+// TestResponsesImageToolChoiceOnly — the reference's routing predicate
+// (has_response_image_generation_tool) also honors a BARE tool_choice
+// {"type":"image_generation"} with no tools array; that layout must route
+// to the image pipeline, not fall through to the text path. The tool
+// definition (size/quality) comes from the tools array per the reference's
+// response_image_tool, so a bare tool_choice uses the pipeline defaults.
+func TestResponsesImageToolChoiceOnly(t *testing.T) {
+	cred := execCredential()
+	fake := newExecFakeCaller()
+	stub := &stubImagePipeline{}
+	stub.install(t)
+	m := execManager(t, fake, "")
+
+	resp, err := m.Handle(pluginabi.MethodExecutorExecute, execRequestBody(t,
+		execResponseRequest(t, cred, "chatgpt-proxy/openai/gpt-5", map[string]any{
+			"input":       "Draw a red square",
+			"tool_choice": map[string]any{"type": "image_generation"},
+		}, false), ""))
+	if err != nil {
+		t.Fatalf("Handle(executor.execute): %v", err)
+	}
+
+	if stub.generateCalls != 1 || stub.codexCalls != 0 {
+		t.Fatalf("generate = %d codex = %d, want the drawing route exactly once (bare tool_choice must route to the image pipeline)",
+			stub.generateCalls, stub.codexCalls)
+	}
+
+	var out struct {
+		Payload []byte `json:"Payload"`
+	}
+	if err := json.Unmarshal(decodeExecResult(t, resp), &out); err != nil {
+		t.Fatalf("decode executor response: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(out.Payload, &body); err != nil {
+		t.Fatalf("payload is not JSON: %v", err)
+	}
+	output, isList := body["output"].([]any)
+	if !isList || len(output) != 1 {
+		t.Fatalf("output = %v, want one item", body["output"])
+	}
+	item, isMap := output[0].(map[string]any)
+	if !isMap || item["type"] != "image_generation_call" || item["status"] != "completed" || item["id"] != "ig_1" {
+		t.Fatalf("output[0] = %+v, want the completed ig_1 image_generation_call", body["output"])
+	}
+}
+
 // ---------------------------------------------------------------------------
 // TestResponsesFunctionTools — function tools reuse the chat format's XML
 // emulation: a tool-call reply parses into function_call output items

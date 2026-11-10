@@ -430,6 +430,24 @@ func TestImportCpaFile(t *testing.T) {
 		}
 	})
 
+	t.Run("mixed flat + nested token set is captured", func(t *testing.T) {
+		fake := newImportFakeCaller()
+		m := newAuthTestManager(t, fake)
+		out := handleManagement(t, m, http.MethodPost, importRouteCpaFile,
+			[]byte(`{"access_token":"at-mixed","tokens":{"refresh_token":"rt-mixed","id_token":"idt-mixed"}}`))
+		if out.StatusCode != http.StatusOK {
+			t.Fatalf("import answered %d: %s", out.StatusCode, out.Body)
+		}
+		name := fake.savedNames()[0]
+		cred, err := FromStorageJSON(fake.store[name])
+		if err != nil {
+			t.Fatalf("stored payload: %v", err)
+		}
+		if cred.AccessToken != "at-mixed" || cred.RefreshToken != "rt-mixed" || cred.IDToken != "idt-mixed" {
+			t.Fatalf("mixed token set not captured fully: %+v", cred)
+		}
+	})
+
 	t.Run("missing access token refuses typed, saves nothing", func(t *testing.T) {
 		fake := newImportFakeCaller()
 		m := newAuthTestManager(t, fake)
@@ -730,6 +748,85 @@ func TestImportSub2apiAccounts(t *testing.T) {
 	if strings.Contains(string(out.Body), jwt) {
 		t.Fatalf("the JWT leaked into the response: %s", out.Body)
 	}
+}
+
+// TestImportSub2apiAccountsSingleUnwrap pins the reference's SINGLE
+// envelope unwrap (sub2api_service.py): _extract_paged_items unwraps
+// itself and the caller passes the raw payload. A payload whose
+// already-unwrapped data itself carries code+data-looking keys must be
+// scanned as items (items key first), not re-unwrapped into that inner
+// value.
+func TestImportSub2apiAccountsSingleUnwrap(t *testing.T) {
+	const jwt = "sub2api-jwt-token"
+	body := []byte(`{"base_url":"http://sub2api.local","email":"admin@example.com","password":"sub2api-password"}`)
+
+	fake := newImportFakeCaller()
+	fake.httpResults = []hostHTTPResponse{
+		{StatusCode: http.StatusOK, Body: []byte(`{"code":0,"message":"ok","data":{"access_token":"` + jwt + `","expires_in":86400}}`)},
+		{StatusCode: http.StatusOK, Body: []byte(`{"code":0,"data":{"code":7,"data":"inner-string","items":[
+			{"id":"acc-1","name":"One","status":"active","credentials":{"email":"one@example.com"}}
+		],"total":1}}`)},
+	}
+	m := newAuthTestManager(t, fake)
+
+	out := handleManagement(t, m, http.MethodGet, importRouteSub2apiAccounts, body)
+	if out.StatusCode != http.StatusOK {
+		t.Fatalf("answered %d: %s", out.StatusCode, out.Body)
+	}
+	var list struct {
+		Accounts []sub2apiAccount `json:"accounts"`
+	}
+	if err := json.Unmarshal(out.Body, &list); err != nil {
+		t.Fatalf("decode accounts: %v (%s)", err, out.Body)
+	}
+	if len(list.Accounts) != 1 || list.Accounts[0].ID != "acc-1" || list.Accounts[0].Email != "one@example.com" {
+		t.Fatalf("listed %+v, want the one account inside the envelope-like data (single unwrap, items scanned)", list.Accounts)
+	}
+}
+
+// TestExtractImportTokensMergesNested pins the flat + nested "tokens"
+// merge: every layout yields the fullest token set available — flat
+// values win per key, and the refresh/id chains see both levels.
+func TestExtractImportTokensMergesNested(t *testing.T) {
+	t.Run("flat access + nested refresh/id", func(t *testing.T) {
+		tokens := extractImportTokens(map[string]any{
+			"access_token": "at-flat",
+			"tokens":       map[string]any{"refresh_token": "rt-nested", "id_token": "idt-nested"},
+		})
+		if tokens.accessToken != "at-flat" || tokens.refreshToken != "rt-nested" || tokens.idToken != "idt-nested" {
+			t.Fatalf("tokens = %+v, want the merged full set", tokens)
+		}
+	})
+	t.Run("flat values win per key", func(t *testing.T) {
+		tokens := extractImportTokens(map[string]any{
+			"access_token":  "at-flat",
+			"refresh_token": "rt-flat",
+			"tokens": map[string]any{
+				"access_token":  "at-nested",
+				"refresh_token": "rt-nested",
+				"id_token":      "idt-nested",
+			},
+		})
+		if tokens.accessToken != "at-flat" || tokens.refreshToken != "rt-flat" || tokens.idToken != "idt-nested" {
+			t.Fatalf("tokens = %+v, want flat values winning per key", tokens)
+		}
+	})
+	t.Run("nested-only still captured", func(t *testing.T) {
+		tokens := extractImportTokens(map[string]any{
+			"tokens": map[string]any{"access_token": "at-nested", "refresh_token": "rt-nested"},
+		})
+		if tokens.accessToken != "at-nested" || tokens.refreshToken != "rt-nested" {
+			t.Fatalf("tokens = %+v, want the nested set", tokens)
+		}
+	})
+	t.Run("flat-only unchanged", func(t *testing.T) {
+		tokens := extractImportTokens(map[string]any{
+			"access_token": "at-flat", "refresh_token": "rt-flat", "id_token": "idt-flat",
+		})
+		if tokens.accessToken != "at-flat" || tokens.refreshToken != "rt-flat" || tokens.idToken != "idt-flat" {
+			t.Fatalf("tokens = %+v, want the flat set", tokens)
+		}
+	})
 }
 
 // TestImportSub2api pins the sub2api batch import: login once, GET

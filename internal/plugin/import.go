@@ -225,25 +225,35 @@ func importTokenAt(record map[string]any, keys ...string) string {
 	return ""
 }
 
-// extractImportTokens pulls the token set from one import payload: the flat
-// sub2api fallback chain (access_token / accessToken / token, plus the
-// refresh/id keys when present) first, then the same keys nested under
-// "tokens" (a CPA codex-export layout). nil and empty maps answer empty.
+// extractImportTokens pulls the FULL token set from one import payload:
+// the flat keys and the same keys nested under "tokens" (a CPA
+// codex-export layout) are merged FIRST — flat values win per key — and
+// then the fallback chains (access_token / accessToken / token, refresh /
+// id) run over the merged set, so every layout yields the fullest token
+// set available. nil and empty maps answer empty.
 func extractImportTokens(record map[string]any) importTokens {
 	if record == nil {
 		return importTokens{}
 	}
-	tokens := importTokens{
-		accessToken:  importTokenAt(record, "access_token", "accessToken", "token"),
-		refreshToken: importTokenAt(record, "refresh_token", "refreshToken"),
-		idToken:      importTokenAt(record, "id_token", "idToken"),
-	}
-	if tokens.accessToken == "" {
-		if nested, isMap := record["tokens"].(map[string]any); isMap {
-			tokens = extractImportTokens(nested)
+	merged := make(map[string]any, len(record))
+	if nested, isMap := record["tokens"].(map[string]any); isMap {
+		for key, value := range nested {
+			merged[key] = value
 		}
 	}
-	return tokens
+	for key, value := range record {
+		// Flat wins per key — except a blank flat value is absent (the
+		// chain skips empty strings), so it must not block the nested one.
+		if blank, isString := value.(string); isString && strings.TrimSpace(blank) == "" {
+			continue
+		}
+		merged[key] = value
+	}
+	return importTokens{
+		accessToken:  importTokenAt(merged, "access_token", "accessToken", "token"),
+		refreshToken: importTokenAt(merged, "refresh_token", "refreshToken"),
+		idToken:      importTokenAt(merged, "id_token", "idToken"),
+	}
 }
 
 // --- the store: dedupe + save ---------------------------------------------
@@ -682,8 +692,9 @@ func unwrapSub2apiEnvelope(payload map[string]any) any {
 
 // extractSub2apiPagedItems ports the reference _extract_paged_items: a
 // paginated sub2api response → (items, total). It unwraps the envelope
-// itself (the reference does) and then handles the wrapped shapes
-// ({items|data|list: [...], total}) and bare lists.
+// itself (the reference does, exactly ONCE here — callers pass the raw
+// payload) and then handles the wrapped shapes ({items|data|list: [...],
+// total}) and bare lists.
 func extractSub2apiPagedItems(payload any) ([]any, int) {
 	if inner, isMap := payload.(map[string]any); isMap {
 		payload = unwrapSub2apiEnvelope(inner)
@@ -757,7 +768,7 @@ func (m *Manager) sub2apiListAccounts(callbackID, baseURL, jwt string) ([]sub2ap
 				message: "the remote account list payload is invalid",
 			}
 		}
-		items, total := extractSub2apiPagedItems(unwrapSub2apiEnvelope(payload))
+		items, total := extractSub2apiPagedItems(payload)
 		if len(items) == 0 {
 			break
 		}

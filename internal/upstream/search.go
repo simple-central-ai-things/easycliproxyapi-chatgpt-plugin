@@ -627,8 +627,10 @@ func cleanSearchURL(value string) string {
 
 // findSearchValue ports _find_search_value: a recursive scan for the first
 // non-empty string value under key (dicts check their own key first, then
-// their values in order; lists scan items; strings try a JSON decode, and a
-// string payload for key "conversation_id" is regex-scanned).
+// their values in sorted-key order for determinism — Go maps drop the JSON
+// insertion order the oracle reads; pathological docs only, lists are
+// insertion-ordered in practice; lists scan items; strings try a JSON
+// decode, and a string payload for key "conversation_id" is regex-scanned).
 func findSearchValue(payload any, key string) string {
 	switch typed := payload.(type) {
 	case string:

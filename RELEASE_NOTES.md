@@ -102,12 +102,14 @@ remote-failure responses, no credential written). The pass includes the
 four Phase-2 review minors (`3aa37d2`), re-deployed and re-verified before
 the tag moved.
 
-Still operator-gated (they need credentials this repo must not hold):
+Deferred by operator decision (2026-11-10) — they need credentials this
+repo must not hold, and the operator chose not to run them. Both are
+implemented, offline-tested, and proven registered + fail-closed live:
 
-- one `auth.login.password` recovery on a sacrificial account (OTP-enabled
-  accounts must refuse typed, not hang);
-- a real CPA or sub2api credential import through the EasyCLI panel,
-  confirming the saved record serves text turns.
+- a real `auth.login.password` recovery run (OTP-enabled accounts must
+  refuse typed, not hang);
+- a real CPA or sub2api credential import through the panel, confirming the
+  saved record serves text turns.
 
 ## Remaining gaps (post-Phase-2)
 

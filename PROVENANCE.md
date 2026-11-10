@@ -207,7 +207,10 @@ re-verified before the v0.2.0 tag moved to it:
 
 Operator-gated (needs the account's email+password or a real import source,
 which are not recorded here): a live `auth.login.password` recovery and a
-real CPA/sub2api credential import.
+real CPA/sub2api credential import. **Deferred by operator decision
+(2026-11-10):** the routes/RPC are implemented, offline-tested, and proven
+registered + fail-closed live; the operator chose not to run a real recovery
+or import, so these stay unexercised end-to-end by design (not a blocker).
 
 ## v0.2.1 panel-surface live verification (2026-11-10)
 

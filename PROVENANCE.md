@@ -208,3 +208,22 @@ re-verified before the v0.2.0 tag moved to it:
 Operator-gated (needs the account's email+password or a real import source,
 which are not recorded here): a live `auth.login.password` recovery and a
 real CPA/sub2api credential import.
+
+## v0.2.1 panel-surface live verification (2026-11-10)
+
+The v0.2.1 `.so` (registration `ConfigFields` + the
+`POST chatgpt-proxy/login/password` management route) was deployed to the
+live gateway (startup log: `plugin registered ... version=0.2.1`) and
+verified through the public gateway port with the management key:
+
+- **ConfigFields:** `GET /v0/management/plugins` → the plugin entry
+  advertises all 15 config fields (`base-url`, `tls-mode`,
+  `search-timeout-secs`, …), with `tls-mode` as an enum
+  (`["stdlib","utls"]`) — the panel's plugin-settings UI now renders them.
+- **Recovery route:** `POST .../chatgpt-proxy/login/password` with an empty
+  body → typed `invalid_request` 400 ("email and password are required")
+  before any upstream call — the route is registered, dispatched, and
+  fail-closed. A real recovery run is operator-gated (it would attempt a
+  login against the account; no failed attempt was made during
+  verification). A `GET` on the POST-only route answers the host's own 404
+  (the host registers exact method+path pairs) — expected, not a defect.

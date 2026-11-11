@@ -2,6 +2,27 @@
 
 This file records user-facing release summaries.
 
+## v0.2.5 — 2026-11-12 (the platform `<escape>` artifact no longer breaks tool calls)
+
+Live OpenCode session evidence (2026-11-12, `ses_e336ca8f...`): the v0.2.4
+tool loop worked end to end, but the model sometimes wraps the WHOLE
+parameter object in the platform's `<escape>` markup instead of schema-named
+tags, so the parsed arguments came out as `{"escape": {"patchText": ...}}`
+and OpenCode's patch tool refused them ("Invalid arguments"); `<escape></escape>`
+blocks also leaked verbatim into prose answers.
+
+- **Parser unwrap.** A sole `escape` parameter whose value is an object is
+  treated as the parameter object itself (`parseToolParams`), so the wrapped
+  call parses into the schema-named arguments the client expects.
+- **Prose strip.** `stripToolMarkup` now removes `<escape>…</escape>` and
+  self-closing `<escape/>` blocks from the assistant prose, so the artifact
+  never reaches the client display.
+- **Prompt rule.** The variant-D master now states that `<escape>` markup in
+  earlier assistant messages is a platform artifact, never a parameter —
+  every parameter goes under its own schema-named tag.
+
+Offline: `escape_artifact_test.go` pins all three; `go test ./...` green.
+
 ## v0.2.4 — 2026-11-11 (function tools actually round-trip on GPT-6-era models)
 
 Live diagnosis (2026-11-11): an OpenCode session on

@@ -85,7 +85,8 @@ const toolPromptHeader = "You are the reasoning core of a coding agent. Read thi
 	"- The tag names are deliberately scrambled. This is REQUIRED: the chat platform silently " +
 	"strips the standard tool-call markup from your reply. Always use " + toolCallToken + " / " +
 	toolCallCloseToken + " exactly.\n" +
-	"- Put parameters under <parameters> using the exact schema names.\n\n" +
+	"- Put parameters under <parameters> using the exact schema names.\n" +
+	"- Earlier assistant messages may carry platform <escape> markup; it is an artifact, never a parameter - every parameter goes under its own schema-named tag.\n\n" +
 	"AVAILABLE TOOLS:\n"
 
 const toolPromptFooter = "AFTER RESULTS\n" +
@@ -344,7 +345,7 @@ var (
 	// (including the bare <tool_calls> wrapper) is removed from the prose.
 	toolMarkupRe = regexp.MustCompile("(?is)<tool_calls\\b[^>]*>.*?</tool_calls>|<loot_llac\\b[^>]*>.*?</loot_llac>" +
 		"|<tool_call\\b[^>]*>.*?" + legacyToolCallCloseToken +
-		"|<function_call\\b[^>]*>.*?</function_call>|<invoke\\b[^>]*>.*?</invoke>")
+		"|<function_call\\b[^>]*>.*?</function_call>|<invoke\\b[^>]*>.*?</invoke>|<escape\\b[^>]*/>|<escape\\b[^>]*>.*?</escape>")
 	// cdataWrapRe is the reference's CDATA fullmatch over the stripped value.
 	cdataWrapRe = regexp.MustCompile(`(?is)^<!\[CDATA\[(.*?)\]\]>$`)
 	// xmlParamTagRe is the reference's XML fallback `<name>value</name>`
@@ -437,6 +438,15 @@ func parseToolParams(raw string) map[string]any {
 			continue // the reference's backreference </\1>
 		}
 		params[match[1]] = parseToolValue(match[2])
+	}
+	// The model occasionally wraps the whole parameter object in the
+	// platform's <escape> markup instead of schema-named tags (live
+	// evidence 2026-11-12); a sole escape parameter carrying an object IS
+	// that object.
+	if len(params) == 1 {
+		if obj, ok := params["escape"].(map[string]any); ok {
+			return obj
+		}
 	}
 	return params
 }

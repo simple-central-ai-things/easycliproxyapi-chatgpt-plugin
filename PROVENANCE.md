@@ -281,3 +281,53 @@ container):
   (`TestStreamStart413IsPayloadTooLarge`) and `matrix_test.go` pins the new
   README errors row; `go vet` + `go test ./...` green, c-shared `.so` rebuilt
   and exercised by `tests/loadsmoke`.
+
+## v0.2.4 tool-emulation live verification (2026-11-11)
+
+Commit `e941219` (deployed in-place: the prior build kept as
+`easycliproxyapi-chatgpt-provider.so.bak-variantD-20261111`, the v0.2.3
+original as `.bak-v0.2.3-pretoolscramble-20261111`; startup log
+`plugin registered ... version=0.2.4`). Symptom that triggered the work:
+an OpenCode session on `openai-plus-chatgpt` refused a trivial file write
+("no access to file-editing tools") and then hallucinated completions —
+the emulated tools never round-tripped.
+
+Diagnosis, all against the live gateway:
+
+- **Echo probe:** the model reproduced a pasted XML block character for
+  character (CDATA included) EXCEPT the reference's canonical single
+  tool-call token, which came back as a blank line — the ChatGPT web
+  backend strips it from the assistant stream. `<invoke>` /
+  `<function_call>` and the scrambled anagram `loot_llac` all pass the
+  backend intact.
+- **System-merged short contract:** the reference's "Tool use rules"
+  block (scrambled or not) merged into the system message produced 0/11
+  XML emission across models (`gpt-6`, `gpt-6-mini`, `gpt-5-6`,
+  `gpt-5-6-thinking`, `gpt-6-thinking`, `gpt-6-instant`), always with a
+  hallucinated completion instead.
+- **Placement/strength matrix (direct EasyCLI loopback, gpt-6):** short
+  contract in system 0/6; long explanatory master in system 14/16
+  cumulative; the live-tuned variant-D master (v1 master + AFTER RESULTS
+  answer rules) 10/10 emission and 5/5 clean round-trip completions in
+  the same-run head-to-head.
+- **Captured OpenCode request:** a temporary debug build dumped one real
+  executor request — 100KB client system prompt + 12 tools + a 4KB user
+  message. Replayed through the gateway: master in the system tail alone
+  0/3, master duplicated into the user tail 2/5, in both 3/5, master in
+  system + the compact PROTOCOL REMINDER bridge in the last user message
+  **5/5** (one turn even checked file existence via `shell` first).
+
+Post-deploy verification:
+
+- **Original failing scenario:** 3/3 parsed `tool_calls`
+  (`finish_reason:"tool_calls"`, `name=write`,
+  `arguments={"content":"helloworld","path":"a.txt"}`) on
+  `openai-plus-chatgpt/openai/gpt-6:free`, non-stream; the streaming path
+  emits the tool_calls delta + `[DONE]`.
+- **Full OpenCode agent runs (`opencode run --auto --archived`):** 3/3
+  created `a.txt` with the requested content through the real
+  `patch`/`shell` tools.
+- Offline: `scrambled_contract_test.go` (scrambled canonical parse /
+  strip / fold + master-section pins), `user_bridge_test.go` (bridge
+  placement), retargeted golden prompts; `go vet` + `go test ./...`
+  green, c-shared `.so` rebuilt and exercised by `tests/loadsmoke`.

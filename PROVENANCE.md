@@ -249,3 +249,35 @@ port:
   answer their typed 400 validation errors; `POST /v1/images/generations`
   (`chatgpt-proxy/gpt-image-2-proxy`, n=1, low quality) → **HTTP 200**, one
   inline `b64_json` (~1.5 MB) — the image executor regression check.
+
+## v0.2.3 payload-too-large live verification (2026-11-11)
+
+Live incident: a long agent conversation exceeded the ChatGPT backend's
+accepted payload size; the upstream edge answered HTTP 413 before the model
+saw the request, and the plugin relayed the generic
+`upstream_status: the upstream returned HTTP 413` (no cause, no fix). Root
+cause confirmed from the EasyCLI error-capture logs (`Content-Length` ~680 KB
+and ~310 KB conversation POSTs, both refused by the upstream edge — retrying
+the same body cannot succeed, so the error is correctly non-retryable).
+
+v0.2.3 types the 413 as `payload_too_large` with an actionable message and
+was deployed to the embedded EasyCLI host. Startup log:
+`plugin registered ... version=0.2.3`. Verified against the running host
+through EasyCLI's loopback API (`127.0.0.1:8317` inside the gateway
+container):
+
+- **Typed 413:** a synthetic oversized `chatgpt-proxy/openai/gpt-6`
+  conversation POST (~520 KB filler body) → **HTTP 413**,
+  `{"error":{"message":"payload_too_large: the ChatGPT backend rejected the
+  request body as too large (HTTP 413) — the conversation exceeds this
+  model's accepted payload size; trim or compact the context, or use a model
+  with a larger limit","type":"invalid_request_error"}}`. The new code and
+  message ride through the RPC envelope instead of folding into
+  `upstream_error`.
+- **Gateway intact:** after the in-place `.so` swap + host restart the
+  gateway container stayed `healthy`; the other three provider plugins
+  re-registered unchanged (commandcode 0.5.0, mistral 0.1.0, opencode 2.5.0).
+- **Offline:** the upstream suite pins the stream-start 413 mapping
+  (`TestStreamStart413IsPayloadTooLarge`) and `matrix_test.go` pins the new
+  README errors row; `go vet` + `go test ./...` green, c-shared `.so` rebuilt
+  and exercised by `tests/loadsmoke`.

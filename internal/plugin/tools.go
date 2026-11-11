@@ -8,14 +8,15 @@ package plugin
 // surface, so tools are emulated over plain text:
 //
 //   - REQUEST: the tools array is rendered as a tool prompt (per-tool
-//     schemas plus the fixed "Tool use rules:" carrying the <tool_calls>
-//     XML output contract) and merged into the conversation's system
+//     schemas plus the variant-D master prompt (mechanics, scrambled
+//     protocol, after-results rules) merged into the conversation's system
 //     message(s); a role:"tool" result folds in as user text
 //     ("Tool result {tool_call_id}: {content}"); a prior assistant
 //     tool_calls message folds back into the reference's tool_use XML text
 //     blocks so a replayed agent loop round-trips.
-//   - REPLY: the assembled assistant text is scanned for the reference's
-//     exact XML (tool_calls / tool_call / tool_name / parameters + CDATA);
+//   - REPLY: the assembled assistant text is scanned for the exact XML
+//     (the scrambled single tool-call tag, the <tool_calls> wrapper,
+//     tool_name, parameters + CDATA);
 //     each resolvable call becomes an OpenAI tool_calls entry with a fresh
 //     call_<uuid> id and the JSON-string arguments, finish_reason becomes
 //     "tool_calls" and the prose keeps only the markup-stripped remainder.
@@ -43,28 +44,90 @@ import (
 )
 
 // The reference's XML tool contract is built around one single tool-call
-// tag (the one between <tool_calls> and </tool_calls>). Both spellings are
-// assembled from parts so the exact tokens never appear contiguously in
-// this source: some message pipelines intercept them as control sequences,
-// and the golden tests depend on these bytes being stable.
+// tag (the one between <tool_calls> and </tool_calls>). The CANONICAL
+// spelling is the scrambled anagram loot_llac: the ChatGPT web backend
+// strips the standard single tool-call token from the assistant stream
+// (live echo evidence, PROVENANCE.md 2026-11-11), so a standard-spelling
+// contract can never round-trip. legacyToolCallCloseToken keeps the
+// standard close accepted defensively by the parser. Every spelling is
+// assembled from parts so no control sequence ever appears contiguously
+// in this source: message pipelines (including agent transcripts)
+// intercept them, and the golden tests depend on these bytes being stable.
 const (
-	toolCallToken      = "<" + "tool_call" + ">"
-	toolCallCloseToken = "</" + "tool_call" + ">"
+	toolCallToken            = "<" + "loot_llac" + ">"
+	toolCallCloseToken       = "</" + "loot_llac" + ">"
+	legacyToolCallCloseToken = "</" + "tool_call" + ">"
 )
 
-// toolUseRules is the reference's fixed rules block (anthropic_v1_messages.py
-// build_tool_prompt): the <tool_calls> XML output contract parseToolCalls
-// expects. The XML is the reference's EXACTLY (the tags sit on their own
-// lines; the parser is dot-all), so the parser below is the proven one,
-// unchanged.
-const toolUseRules = "Tool use rules:\n" +
-	"- If the user asks to list/read/search files, inspect project state, run a command, or answer from local code, you MUST call a suitable tool first. Do not say you cannot access files.\n" +
-	"- To call tools, output ONLY XML and no prose/markdown:\n" +
+// toolPromptHeader / toolPromptFooter are the live-tuned variant-D master
+// prompt (PROVENANCE.md 2026-11-11): the reference's short "Tool use rules"
+// block is ignored by GPT-6-era models in the system message (0/11), while
+// this master - mechanics, the scrambled-contract rationale and the
+// after-results answer rules - emitted the protocol XML in 9/10 standalone
+// turns and 5/5 clean completion answers. The per-tool schema blocks sit
+// between header and footer.
+const toolPromptHeader = "You are the reasoning core of a coding agent. Read this protocol carefully - it defines " +
+	"the ONLY way you can act.\n\n" +
+	"HOW ACTIONS WORK HERE:\n" +
+	"- You have NO direct access to the user's files, shell, or machine. You cannot create, " +
+	"read, or edit anything by yourself. Never pretend you did.\n" +
+	"- The caller (the agent harness sitting in front of you) parses your reply as plain text. " +
+	"When it sees the protocol XML below, it executes the action and sends you the result back " +
+	"as a 'Tool result' message.\n" +
+	"- If you reply with prose like 'I created a.txt', NOTHING happens. The ONLY thing that " +
+	"causes an action is the exact XML below.\n\n" +
+	"THE PROTOCOL (mandatory spelling):\n" +
+	"- To call a tool, output ONLY the XML and no prose/markdown:\n" +
 	"<tool_calls>\n" + toolCallToken + "\n" +
 	"<tool_name>TOOL_NAME</tool_name>\n" +
 	"<parameters><PARAM><![CDATA[value]]></PARAM></parameters>\n" +
 	toolCallCloseToken + "\n</tool_calls>\n" +
-	"- Put parameters under <parameters> using the exact schema names."
+	"- The tag names are deliberately scrambled. This is REQUIRED: the chat platform silently " +
+	"strips the standard tool-call markup from your reply. Always use " + toolCallToken + " / " +
+	toolCallCloseToken + " exactly.\n" +
+	"- Put parameters under <parameters> using the exact schema names.\n\n" +
+	"AVAILABLE TOOLS:\n"
+
+const toolPromptFooter = "AFTER RESULTS\n" +
+	"- When a 'Tool result' arrives, answer the user briefly in plain prose: what was done and " +
+	"any key facts learned.\n" +
+	"- Do not re-call a tool that already succeeded. Do not emit XML unless a further action is " +
+	"needed.\n" +
+	"- Never use internal markup (badges, icons, or escape-style tags) in your answers.\n\n" +
+	"RULES:\n" +
+	"- If the user asks to list/read/search files, inspect project state, run a command, or " +
+	"answer from local code, you MUST call a suitable tool first. Do not say you cannot access " +
+	"files - you access them THROUGH this protocol.\n" +
+	"- After a tool result arrives, answer the user briefly. Do not re-call a tool that already " +
+	"succeeded.\n" +
+	"- Never claim a task is done without having emitted the tool-call XML for it."
+
+// userBridge is the compact action-oriented reminder tool mode appends to
+// the LAST user message. Live evidence (PROVENANCE.md 2026-11-11) on a
+// captured OpenCode request (a 100KB client system prompt + 12 tools): the
+// variant-D master merged into the system tail alone emitted in 0/3 turns,
+// duplicating the master into the user tail in 2/5, in both in 3/5, while
+// the master in the system plus this short reminder in the user reached 5/5.
+// The bridge points at the master's protocol instead of repeating the schemas.
+const userBridge = "PROTOCOL REMINDER - this request needs action, and your reply must carry it:\n" +
+	"output ONLY the protocol XML block defined in your instructions, exactly as shown there " +
+	"(the " + toolCallToken + " tag, <tool_name>, and <parameters> with CDATA values). A reply " +
+	"without that XML block executes nothing."
+
+// appendUserBridge appends the bridge to the last user message (the folded
+// "Tool result" turn included) and leaves every other message untouched; it
+// is a no-op when the conversation tail is not a user message, because the
+// bridge must sit at the recency edge right before the model's next reply.
+func appendUserBridge(messages []upstream.ConversationMessage) []upstream.ConversationMessage {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if strings.TrimSpace(messages[i].Role) != "user" {
+			return messages
+		}
+		messages[i].Content += "\n\n" + userBridge
+		return messages
+	}
+	return messages
+}
 
 // ---------------------------------------------------------------------------
 // Request shaping: the tool prompt.
@@ -95,9 +158,9 @@ func shapeTools(raw json.RawMessage) (prompt string, mode bool, err *pluginabi.E
 	return prompt, true, nil
 }
 
-// buildToolPrompt renders the emulated tool prompt in the reference's exact
-// format: the per-tool schema blocks under "Available tools:" followed by
-// the fixed toolUseRules. Empty when no tool carries a name.
+// buildToolPrompt renders the variant-D master prompt: the header, the
+// per-tool schema blocks, and the footer (after-results + rules). Empty
+// when no tool carries a name.
 func buildToolPrompt(tools []any) string {
 	var blocks []string
 	for _, tool := range tools {
@@ -110,7 +173,7 @@ func buildToolPrompt(tools []any) string {
 	if len(blocks) == 0 {
 		return ""
 	}
-	return "Available tools:\n" + strings.Join(blocks, "\n") + "\n\n" + toolUseRules
+	return toolPromptHeader + strings.Join(blocks, "\n") + "\n\n" + toolPromptFooter
 }
 
 // toolMeta reads one tool's name/description/schema the way the reference's
@@ -269,15 +332,18 @@ var (
 	// scanning (parse_tool_calls). The backticks are \u0060 escapes: a Go
 	// raw string literal cannot contain them.
 	codeFenceRe = regexp.MustCompile("(?is)\u0060{3}.*?\u0060{3}")
-	// toolBlockRe finds every tool-call block in the reference's three
-	// spellings; the non-empty alternation group is the block body. The
-	// close tag rides in via the const so the exact token never appears in
-	// this source.
-	toolBlockRe = regexp.MustCompile("(?is)<tool_call\\b[^>]*>(.*?)" + toolCallCloseToken +
+	// toolBlockRe finds every tool-call block in the scrambled canonical
+	// spelling plus the three legacy spellings; each non-empty alternation
+	// group is a block body (four capture groups, matched in order). The
+	// standard-spelling close rides in via legacyToolCallCloseToken so no
+	// control sequence ever appears contiguously in this source.
+	toolBlockRe = regexp.MustCompile("(?is)<loot_llac\\b[^>]*>(.*?)" + toolCallCloseToken +
+		"|<tool_call\\b[^>]*>(.*?)" + legacyToolCallCloseToken +
 		"|<function_call\\b[^>]*>(.*?)</function_call>|<invoke\\b[^>]*>(.*?)</invoke>")
 	// toolMarkupRe is the reference's strip_tool_markup: every markup block
 	// (including the bare <tool_calls> wrapper) is removed from the prose.
-	toolMarkupRe = regexp.MustCompile("(?is)<tool_calls\\b[^>]*>.*?</tool_calls>|<tool_call\\b[^>]*>.*?" + toolCallCloseToken +
+	toolMarkupRe = regexp.MustCompile("(?is)<tool_calls\\b[^>]*>.*?</tool_calls>|<loot_llac\\b[^>]*>.*?</loot_llac>" +
+		"|<tool_call\\b[^>]*>.*?" + legacyToolCallCloseToken +
 		"|<function_call\\b[^>]*>.*?</function_call>|<invoke\\b[^>]*>.*?</invoke>")
 	// cdataWrapRe is the reference's CDATA fullmatch over the stripped value.
 	cdataWrapRe = regexp.MustCompile(`(?is)^<!\[CDATA\[(.*?)\]\]>$`)
@@ -308,8 +374,9 @@ func xmlValue(text, tag string) string {
 }
 
 // parseToolCalls ports the reference's parse_tool_calls: code fences are
-// stripped, then every single tool-call block (the toolCallToken form, plus
-// the <function_call> and <invoke> variants) is scanned and each block with
+// stripped, then every single tool-call block (the scrambled canonical
+// form, plus the standard and the <function_call> and <invoke> variants)
+// is scanned and each block with
 // a resolvable name yields one call. The name resolves from tool_name, name
 // or function; the parameters from parameters, input or arguments
 // (defaulting to "{}").
@@ -318,7 +385,7 @@ func parseToolCalls(text string) []toolCall {
 	var calls []toolCall
 	for _, match := range toolBlockRe.FindAllStringSubmatch(text, -1) {
 		block := ""
-		for _, part := range match[1:4] {
+		for _, part := range match[1:5] {
 			if part != "" {
 				block = part
 				break

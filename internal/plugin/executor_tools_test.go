@@ -195,8 +195,9 @@ func TestToolsEmulatedNonStream(t *testing.T) {
 	// conversation body.
 	body := conversationBodyText(t, fake)
 	for _, want := range []string{
-		`"role": "system"`, "Be brief.", "Available tools:", "Tool: get_weather",
-		"Description: Get the weather for a city", "Tool use rules:",
+		`"role": "system"`, "Be brief.", "AVAILABLE TOOLS:", "Tool: get_weather",
+		"Description: Get the weather for a city", "HOW ACTIONS WORK HERE:",
+		"AFTER RESULTS", "RULES:",
 		"<tool_calls>", "<tool_name>TOOL_NAME</tool_name>", "<![CDATA[value]]>",
 	} {
 		if !strings.Contains(body, want) {
@@ -247,7 +248,7 @@ func TestToolsNoCallNormal(t *testing.T) {
 	}
 
 	body := conversationBodyText(t, fake)
-	if !strings.Contains(body, `"role": "system"`) || !strings.Contains(body, "Available tools:") {
+	if !strings.Contains(body, `"role": "system"`) || !strings.Contains(body, "AVAILABLE TOOLS:") {
 		t.Fatalf("the tool prompt must be injected as a new system message:\n%s", body)
 	}
 }
@@ -329,7 +330,7 @@ func TestToolsStreamEmitsToolCalls(t *testing.T) {
 	// Tool requests are not token-streamed: the whole buffered answer went
 	// out as one content frame, never as the fixture's incremental deltas.
 	body := conversationBodyText(t, fake)
-	if !strings.Contains(body, "Available tools:") {
+	if !strings.Contains(body, "AVAILABLE TOOLS:") {
 		t.Fatalf("the tool prompt must reach the upstream even in stream mode:\n%s", body)
 	}
 }

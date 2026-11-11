@@ -102,10 +102,15 @@ internal/plugin/
                               tools.go with the nameless-tools refusal,
                               effort mapping, usage estimate,
                               chat.completion frames)
-  tools.go                    the OpenAI function-tools emulation: XML tool
-                              prompt + reply parsing (ported from the MIT
-                              reference's proven pattern), the agent-loop
-                              folds and the buffered tool stream
+  tools.go                    the OpenAI function-tools emulation: the
+                              variant-D master prompt (mechanics + scrambled
+                              XML protocol + after-results rules) with the
+                              per-tool schema blocks, the compact
+                              PROTOCOL REMINDER user bridge, reply parsing
+                              (scrambled canonical spelling, standard /
+                              function_call / invoke accepted defensively),
+                              the agent-loop folds and the buffered tool
+                              stream
   executor_image.go           the openai-image turn (route by base name,
                               generations/edits payload, inline b64_json)
   executor_responses.go       the openai-response (Responses API) turn:
@@ -159,7 +164,7 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
 ## Contracts
 
 - Plugin identity (pinned by `internal/plugin/plugin_test.go`):
-  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.3`, provider key
+  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.4`, provider key
   `chatgpt-proxy`,
   `GitHubRepository=https://github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin`
   (the host `validPlugin` gate rejects an empty value).

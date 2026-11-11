@@ -96,7 +96,7 @@ the exception: it is pinned one-directionally, each documented row against
 the code.
 
 - Plugin identity (pinned by `internal/plugin/plugin_test.go`):
-  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.3`, provider key
+  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.4`, provider key
   `chatgpt-proxy`, `GitHubRepository` = this repo (the host `validPlugin`
   gate rejects an empty value). The `registry.json` store entry carries the
   same id, version and repository URL.
@@ -350,10 +350,19 @@ the code.
   upstream slug; anything else (the image models, a foreign id) is refused
   with typed `400 model_unknown`. A `tools` array of OpenAI function tools
   is EMULATED (the upstream conversation API has no tool surface): the
-  per-tool schemas plus the fixed "Tool use rules:" block are merged into
-  the conversation's system message(s), the reply's tool-call XML is parsed
-  back into OpenAI `tool_calls` (fresh `call_<uuid>` ids, JSON-string
-  arguments, `finish_reason:"tool_calls"`, markup-stripped `content`), and
+  per-tool schemas are wrapped in the variant-D master prompt (the
+  mechanics of caller-side execution, the scrambled XML protocol, the
+  after-results answer rules) and merged into the conversation's system
+  message(s); tool mode additionally appends a compact PROTOCOL REMINDER
+  bridge to the LAST user message. The single tool-call tag uses a
+  SCRAMBLED anagram spelling (`loot_llac`) as its canonical form: the
+  ChatGPT web backend strips the standard spelling from the assistant
+  stream (live echo evidence, PROVENANCE.md 2026-11-11), so a
+  standard-spelling contract can never round-trip; the parser accepts the
+  standard, `function_call` and `invoke` spellings defensively. The
+  reply's tool-call XML is parsed back into OpenAI `tool_calls` (fresh
+  `call_<uuid>` ids, JSON-string arguments,
+  `finish_reason:"tool_calls"`, markup-stripped `content`), and
   `role:"tool"` results plus prior assistant `tool_calls` round-trip into
   the conversation. Streaming WITH tools is buffered, not token-streamed:
   the whole upstream turn is drained, then emitted as a role frame, a
@@ -443,8 +452,8 @@ the code.
   contributing nothing) and the outbound shaping differ. Tools reuse the
   `openai` format's XML emulation (`input_schema` accepted); when the
   system prompt carries "You are Claude Code", the per-tool schema prompt
-  is replaced by the reference's single-line XML rule (appended even
-  without a tools array). Non-stream answers carry the `message` envelope
+  is replaced by the reference's single-line XML rule (the scrambled
+  spelling via the shared constants; appended even without a tools array). Non-stream answers carry the `message` envelope
   (`msg_<uuid>` id with dashes — unlike the Responses hex form —
   `content[]` of `text` and/or `tool_use` blocks with fresh `toolu_<uuid>`
   ids, `stop_reason` `end_turn` / `tool_use`, `stop_sequence` null, usage

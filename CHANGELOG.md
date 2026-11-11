@@ -2,6 +2,43 @@
 
 This file records user-facing release summaries.
 
+## v0.2.4 — 2026-11-11 (function tools actually round-trip on GPT-6-era models)
+
+Live diagnosis (2026-11-11): an OpenCode session on
+`openai-plus-chatgpt` answered "I have no access to file-editing tools" and
+simply refused — the tool emulation was not round-tripping. Two independent
+breaks, both proven live against the deployed gateway (evidence in
+`PROVENANCE.md`):
+
+- **The platform strips the standard tool-call tag.** An echo probe showed
+  the ChatGPT web backend removes the reference's canonical single
+  tool-call token from the assistant stream — whatever the model emitted
+  never reached the parser. The canonical spelling is now a SCRAMBLED
+  anagram (`loot_llac`, assembled from parts in source like before); the
+  parser keeps accepting the standard, `function_call` and `invoke`
+  spellings defensively.
+- **The reference's short "Tool use rules" block is ignored.** On
+  GPT-6-era models the short contract merged into the system message
+  produced hallucinated completions ("Created `a.txt`...") with no XML —
+  0/11 cumulative across placements. The prompt is now the live-tuned
+  variant-D master: the mechanics of caller-side execution (prose alone
+  changes nothing), the scrambled protocol with its rationale, the
+  per-tool schema blocks, the AFTER RESULTS answer-quality rules (clean
+  prose completion, no internal markup), and the must-call-a-tool rules.
+- **Recency bridge.** A master merged into the tail of a large client
+  system prompt (a captured OpenCode request carries a 100KB system + 12
+  tools) still diluted to 0/3; tool mode now appends a compact PROTOCOL
+  REMINDER bridge to the LAST user message, which lifted the same captured
+  request to 5/5.
+
+Live verification on the deployed gateway: 3/3 parsed `tool_calls` on the
+original failing scenario (non-stream and stream), 5/5 emission on the
+captured OpenCode request, 5/5 clean round-trip completions, and 3/3 full
+OpenCode agent runs that created the file through the real `patch`/`shell`
+tools. Offline: `scrambled_contract_test.go`, `user_bridge_test.go` and the
+retargeted golden pins keep the suite green; `go test ./...` + loadsmoke
+pass.
+
 ## v0.2.3 — 2026-11-11 (typed 413: `payload_too_large` with the actionable message)
 
 Live incident (2026-11-11): a long agent conversation exceeded the ChatGPT

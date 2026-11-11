@@ -187,6 +187,9 @@ type shapeChatPayload struct {
 // turn. A tools array where no tool carries a usable function name keeps
 // the honest typed 400 tools_unsupported refusal BEFORE any upstream call.
 //
+// Tool mode additionally appends the compact userBridge to the last user
+// message (PROVENANCE.md 2026-11-11 recency evidence).
+
 // Agent-loop round-trip: a role:"tool" result folds in as user text the way
 // the reference formats a tool_result block ("Tool result {id}:
 // {content}"); a prior assistant tool_calls message folds back into the
@@ -246,6 +249,10 @@ func shapeChatRequest(body []byte, searchMode bool) ([]upstream.ConversationMess
 	// The tool prompt joins the conversation's system message(s) (the
 	// reference's merge_system).
 	messages = mergeSystemPrompt(messages, prompt)
+
+	if toolMode {
+		messages = appendUserBridge(messages)
+	}
 
 	effort := payload.ThinkingEffort
 	if effort == "" {

@@ -38,10 +38,9 @@ func TestBuildToolPromptFunctionShape(t *testing.T) {
 		},
 	})
 	// Go marshals map keys sorted, so the schema renders deterministically.
-	want := `Available tools:
-Tool: get_weather
+	want := toolPromptHeader + `Tool: get_weather
 Description: Get the weather for a city
-Parameters: {"properties":{"city":{"type":"string"}},"required":["city"],"type":"object"}` + "\n\n" + toolUseRules
+Parameters: {"properties":{"city":{"type":"string"}},"required":["city"],"type":"object"}` + "\n\n" + toolPromptFooter
 	if prompt != want {
 		t.Fatalf("prompt =\n%s\nwant\n%s", prompt, want)
 	}
@@ -58,7 +57,7 @@ func TestBuildToolPromptFlatShape(t *testing.T) {
 	if !strings.Contains(prompt, "Tool: search\nDescription: Search the web\nParameters: {\"q\":\"string\"}") {
 		t.Fatalf("prompt missing the flat-shape tool block:\n%s", prompt)
 	}
-	if !strings.HasPrefix(prompt, "Available tools:\n") {
+	if !strings.HasPrefix(prompt, "You are the reasoning core") {
 		t.Fatalf("prompt must open with the Available tools header:\n%s", prompt)
 	}
 }
@@ -183,7 +182,7 @@ func TestFoldAssistantToolCalls(t *testing.T) {
 	folded := foldAssistantToolCalls("Let me check.", []shapeAssistantToolCall{
 		{Function: shapeToolFunction{Name: "get_weather", Arguments: `{}`}},
 	})
-	want := "Let me check.\n<tool_calls>\n<tool_call>\n<tool_name>get_weather</tool_name>\n<parameters>{}</parameters>\n</tool_call>\n</tool_calls>"
+	want := "Let me check.\n<tool_calls>\n" + toolCallToken + "\n<tool_name>get_weather</tool_name>\n<parameters>{}</parameters>\n" + toolCallCloseToken + "\n</tool_calls>"
 	if folded != want {
 		t.Fatalf("folded =\n%s\nwant\n%s", folded, want)
 	}

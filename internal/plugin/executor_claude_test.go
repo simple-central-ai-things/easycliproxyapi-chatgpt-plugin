@@ -141,7 +141,8 @@ func TestClaudeMessagesMapping(t *testing.T) {
 		if messages[0].Role != "system" || !strings.HasPrefix(messages[0].Content, "You are helpful.\n\n") ||
 			!strings.Contains(messages[0].Content, "Tool: get_weather") ||
 			!strings.Contains(messages[0].Content, `Parameters: {"type":"object"}`) ||
-			!strings.Contains(messages[0].Content, "Tool use rules:") {
+			!strings.Contains(messages[0].Content, "THE PROTOCOL (mandatory spelling):") ||
+			!strings.Contains(messages[0].Content, "AVAILABLE TOOLS:") {
 			t.Fatalf("messages[0] = %+v, want the system with the tool schema prompt merged", messages[0])
 		}
 		if messages[1].Role != "user" || messages[1].Content != "Say hello" {
@@ -233,7 +234,7 @@ func TestClaudeMessagesMapping(t *testing.T) {
 		if !strings.Contains(messages[0].Content, "Tool output adapter: when calling tools") {
 			t.Fatalf("messages[0] = %+v, want the single-line XML rule for Claude Code clients", messages[0])
 		}
-		if strings.Contains(messages[0].Content, "Available tools:") {
+		if strings.Contains(messages[0].Content, "AVAILABLE TOOLS:") {
 			t.Fatalf("messages[0] = %+v, the full schema prompt must be replaced for Claude Code", messages[0])
 		}
 	})

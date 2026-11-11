@@ -2,6 +2,24 @@
 
 This file records user-facing release summaries.
 
+## v0.2.3 — 2026-11-11 (typed 413: `payload_too_large` with the actionable message)
+
+Live incident (2026-11-11): a long agent conversation exceeded the ChatGPT
+backend's accepted payload size, and the upstream edge answered HTTP 413
+before the model ever saw the request. The plugin relayed it as the generic
+`upstream_status: the upstream returned HTTP 413`, which names neither the
+cause nor the fix — and every retry, including context compaction, fails the
+same way, because the whole OpenAI message array rides on one stateless
+request.
+
+- **`payload_too_large` (413, never retryable).** The conversation status
+ mapping now types the 413 with a static message that says what happened and
+ what to do: "trim or compact the context, or use a model with a larger
+ limit". The typed code rides through to the RPC envelope (it no longer folds
+ into `upstream_error`), the README errors matrix pins the new row, and the
+ matrix + upstream suites cover it offline. A 413 means the SAME body fails
+ again, so it is not retryable by construction.
+
 ## v0.2.2 — 2026-11-10 (removed the drawing workbench; HTML-safe settings text)
 
 Operator decision: the host is a model-serving proxy, so the plugin no longer

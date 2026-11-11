@@ -331,3 +331,31 @@ Post-deploy verification:
   strip / fold + master-section pins), `user_bridge_test.go` (bridge
   placement), retargeted golden prompts; `go vet` + `go test ./...`
   green, c-shared `.so` rebuilt and exercised by `tests/loadsmoke`.
+
+## v0.2.5 escape-artifact live verification (2026-11-12)
+
+Commit `6620708`, deployed in-place (the v0.2.4 build kept as
+`easycliproxyapi-chatgpt-provider.so.bak-variantD-20261111`; startup log
+`plugin registered ... version=0.2.5`). Trigger: the interactive OpenCode
+session `ses_e336ca8ffffeyecfCYlamLsNR7` ("Write helloworld to a.txt",
+gpt-6 via litellm) — the v0.2.4 loop itself worked (5/5 requests emitted
+tool calls, files b/c/d created), but the export showed two defects:
+
+- On two of five turns the model wrapped the entire parameter object in
+  the platform's `<escape>` markup instead of schema-named tags; the
+  parser produced `{"escape": {"patchText": "*** Begin Patch..."}}` and
+  OpenCode's patch tool answered "Invalid arguments" (the d.txt turn
+  self-healed via the model's retry with correct tags).
+- `<escape></escape>` blocks reached the client display verbatim, once as
+  the ENTIRE completion answer (the b.txt turn).
+
+Post-deploy verification:
+
+- **Offline:** `escape_artifact_test.go` pins the sole-escape unwrap
+  (JSON + CDATA + mixed-parameter negative), the prose strip (paired,
+  self-closing, mid-sentence), the full-block parse, and the prompt rule;
+  `go vet` + `go test ./...` green, c-shared rebuilt, loadsmoke pass.
+- **Live smoke:** the original scenario answers `finish_reason:"tool_calls"`
+  with `name=write`, `arguments={"content":"helloworld","path":"a.txt"}`.
+- **Full OpenCode run:** one `opencode run --auto --archived` turn created
+  `a.txt` with the requested content in a fresh scratch directory.

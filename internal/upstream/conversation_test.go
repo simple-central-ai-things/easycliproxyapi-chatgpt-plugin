@@ -784,3 +784,28 @@ func mustMarshal(t *testing.T, payload map[string]any) []byte {
 	}
 	return body
 }
+
+func TestStreamStart413IsPayloadTooLarge(t *testing.T) {
+	// A 413 at stream start is the upstream refusing the conversation body
+	// as too large: the typed payload_too_large error, non-retryable (the
+	// same body fails again) with the actionable message that names the fix.
+	u := &startStatusUpstream{status: http.StatusRequestEntityTooLarge}
+	_, err := StreamConversation(context.Background(), u, fixtureCredential(),
+		SentinelTokens{}, testPayload(t))
+	var convErr *ConvError
+	if !errors.As(err, &convErr) {
+		t.Fatalf("error = %v, want a typed ConvError", err)
+	}
+	if convErr.Code != "payload_too_large" {
+		t.Fatalf("Code = %q, want payload_too_large", convErr.Code)
+	}
+	if convErr.HTTPStatus != http.StatusRequestEntityTooLarge {
+		t.Fatalf("HTTPStatus = %d, want 413", convErr.HTTPStatus)
+	}
+	if convErr.Retryable {
+		t.Fatalf("Retryable = true, want false (the same body fails again)")
+	}
+	if !strings.Contains(convErr.Error(), "trim") && !strings.Contains(convErr.Error(), "compact") {
+		t.Fatalf("message %q must name the fix (trim/compact the context)", convErr.Error())
+	}
+}

@@ -360,6 +360,10 @@ func mapUpstreamError(err error) *pluginabi.Error {
 			e := typedErr("upstream_stream_timeout", convErr.Error(), http.StatusGatewayTimeout)
 			e.Retryable = true
 			return e
+		case convErr.Code == "payload_too_large":
+			// The body exceeded the backend's accepted size: retrying the
+			// same payload is guaranteed to fail, so never retryable.
+			return typedErr("payload_too_large", convErr.Error(), http.StatusRequestEntityTooLarge)
 		case convErr.HTTPStatus == http.StatusNotFound:
 			return typedErr("no_available_model", convErr.Error(), http.StatusNotFound)
 		default:

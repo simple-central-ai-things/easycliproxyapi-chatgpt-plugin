@@ -454,6 +454,8 @@ func TestDocumentedErrorMatrixMatchesDispatch(t *testing.T) {
 				return mapUpstreamError(&upstream.ConvError{Code: "rate_limited", HTTPStatus: 429, RetryAfter: 5})
 			case "upstream_stream_timeout":
 				return mapUpstreamError(upstream.ErrStreamTimeout)
+			case "payload_too_large":
+				return mapUpstreamError(upstream.ErrPayloadTooLarge)
 			case "no_available_model":
 				return mapUpstreamError(&upstream.ConvError{Code: "moderation", HTTPStatus: 404})
 			case "upstream_error":

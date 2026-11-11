@@ -490,6 +490,7 @@ the code.
 | `invalid_token` | 401 | no | error-map |
 | `rate_limited` | 429 | yes | error-map |
 | `upstream_stream_timeout` | 504 | yes | error-map |
+| `payload_too_large` | 413 | no | error-map |
 | `no_available_model` | 404 | no | error-map |
 | `upstream_error` | 502 | yes | error-map |
 | `content_policy_violation` | 400 | no | error-map |
@@ -513,7 +514,13 @@ the code.
 
   `rate_limited` carries `Retry-After` when upstream sends it;
   `upstream_stream_timeout` (504) fires on the SSE hard cap — the turn
-  may still be running upstream; `upstream_error` is the transport
+  may still be running upstream; `payload_too_large` (413) fires when the
+  upstream edge refuses the conversation body as too large — the whole
+  message array rides on one stateless request, so a long conversation
+  can exceed the backend's payload size inside the token limit; it is
+  never retryable because the same body fails again, and the message
+  names the fix (trim or compact the context, or use a larger model);
+  `upstream_error` is the transport
   fallback shape (a typed upstream status rides through otherwise);
   `no_assistant_content` — a completed turn with no visible assistant
   message is always typed 502, never an empty 200; `unsupported` is the

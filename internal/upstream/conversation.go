@@ -131,12 +131,28 @@ var (
 		Retryable: false,
 		message:   "the upstream returned a malformed conversation document",
 	}
+	// ErrPayloadTooLarge: the upstream edge refused the conversation body
+	// outright (HTTP 413, before the model saw it). The whole OpenAI
+	// message array rides on one stateless request, so a long conversation
+	// can exceed the backend's accepted payload size even well inside the
+	// advertised token limit. Never retryable: the same body fails again —
+	// the caller must trim or compact the context or use a larger model.
+	ErrPayloadTooLarge = &ConvError{
+		Code:       "payload_too_large",
+		HTTPStatus: http.StatusRequestEntityTooLarge,
+		Retryable:  false,
+		message: "the ChatGPT backend rejected the request body as too large (HTTP 413) — " +
+			"the conversation exceeds this model's accepted payload size; " +
+			"trim or compact the context, or use a model with a larger limit",
+	}
 )
 
 // statusError maps one upstream status the way the oracle's ensure_ok + the
 // typed retry rules do: 2xx passes, 401 is the typed invalid_token, 429 is
-// retryable rate_limited (carrying Retry-After when parseable), 5xx is
-// retryable upstream_status, everything else non-retryable.
+// retryable rate_limited (carrying Retry-After when parseable), 413 is the
+// typed non-retryable payload_too_large (the body exceeded the backend's
+// accepted size — trimming, not retrying, is the fix), 5xx is retryable
+// upstream_status, everything else non-retryable.
 func statusError(status int, retryAfter *int) error {
 	if status >= 200 && status < 300 {
 		return nil
@@ -155,6 +171,9 @@ func statusError(status int, retryAfter *int) error {
 			err.RetryAfter = *retryAfter
 		}
 		return err
+	}
+	if status == http.StatusRequestEntityTooLarge {
+		return ErrPayloadTooLarge
 	}
 	retryable := status >= http.StatusInternalServerError
 	return &ConvError{

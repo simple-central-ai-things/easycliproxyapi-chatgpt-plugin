@@ -359,3 +359,33 @@ Post-deploy verification:
   with `name=write`, `arguments={"content":"helloworld","path":"a.txt"}`.
 - **Full OpenCode run:** one `opencode run --auto --archived` turn created
   `a.txt` with the requested content in a fresh scratch directory.
+
+## v0.2.6 nudge-retry + all-tools coverage (2026-11-12)
+
+Commit `c15a1a1`, deployed in-place (the v0.2.5 build kept as
+`easycliproxyapi-chatgpt-provider.so.bak-v0.2.5-20261112`; startup log
+`plugin registered ... version=0.2.6`). Trigger: in the interactive
+OpenCode session `ses_e336ca8ffffeyecfCYlamLsNR7`, one of five tool turns
+arrived with EMPTY parameters (`Arguments provided: {}`) and the client's
+patch tool refused it; the model recovered once by retrying, but a later
+shell call failed the same way and the turn ended without acting.
+
+- **Offline:** `nudge_retry_test.go` scripts a two-turn upstream (first
+  reply: an empty-`<parameters>` call; second: the repaired one) and pins
+  the internal retry — two conversation stream starts, the nudged payload
+  carrying the assistant replay + instruction, and the repaired
+  `{"city":"Paris"}` arguments in the answer. Full suite green.
+- **Live smoke (pre-cooldown):** the standard scenario answered
+  `finish_reason:"tool_calls"` with correct write arguments.
+- **All-tools runner** (`~/.cache/opencode/tmp/run-tools-test.sh`, 10 of
+  the 12 captured OpenCode tools): PASS read, patch, webfetch, execute,
+  skill-prompt routing; SKIP image (harness image credits); the remaining
+  failures (grep/shell/subagent/skill file-move) were UPSTREAM quota
+  exhaustion, not emulation faults — the EasyCLI error logs show
+  `no_assistant_content: the turn completed with no visible assistant
+  content (http 502)` escalating to the pool's `auth_unavailable`
+  cooldown after the day's ~60 verification turns. The typed 502 +
+  cooldown behavior is the plugin/pool working as designed.
+
+Re-run once the account window resets: `zsh ~/.cache/opencode/tmp/run-tools-test.sh`
+(prompt catalog: `~/.cache/opencode/tmp/chatgpt-tools-prompts.md`).

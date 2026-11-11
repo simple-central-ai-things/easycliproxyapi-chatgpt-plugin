@@ -60,6 +60,14 @@ type textTurn struct {
 	// is the last user message text it posts.
 	searchMode  bool
 	searchQuery string
+	// slug and effort mirror the values baked into turn.payload so the
+	// nudge retry can rebuild it with extra messages.
+	slug   string
+	effort string
+	// nudged marks the empty-args retry as spent; nudgeRetry, when set by
+	// the openai handler, re-runs the turn once and returns its text.
+	nudged     bool
+	nudgeRetry func() (string, bool)
 }
 
 // prepareTextTurn decodes the credential, resolves the model, shapes the
@@ -93,6 +101,7 @@ func (m *Manager) prepareTextTurn(req executorRequest) (*textTurn, *pluginabi.Er
 		hardCap:      sseHardCapFor(cfg),
 		authFileName: execAuthFileName(req),
 	}
+	turn.slug = slug
 
 	// Request shaping from the host-passed OpenAI chat payload
 	// (SourceFormat == output format → the host passes it untranslated).
@@ -134,6 +143,7 @@ func (m *Manager) prepareTextTurn(req executorRequest) (*textTurn, *pluginabi.Er
 		// thinking_effort / reasoning_effort (auto → omitted upstream).
 		effort = cfg.ThinkingEffort
 	}
+	turn.effort = effort
 	turn.promptTokens = estimatePromptTokens(messages)
 
 	convReq := upstream.ConversationRequest{
@@ -340,7 +350,14 @@ func drainTextCompletion(events <-chan upstream.ConvEvent, turn *textTurn) (stri
 			if ev.Text == "" {
 				return "", noAssistantContent()
 			}
-			return ev.Text, nil
+			text := ev.Text
+			if turn.nudgeRetry != nil && turnNeedsNudge(turn, text) {
+				applyNudge(turn, text)
+				if retryText, ok := turn.nudgeRetry(); ok {
+					text = retryText
+				}
+			}
+			return text, nil
 		}
 	}
 	// StreamConversation's reader emits complete or error before closing;

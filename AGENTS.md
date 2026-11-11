@@ -164,7 +164,7 @@ plugins/<os>/<arch>/          gitignored local build output (*.so/*.h)
 ## Contracts
 
 - Plugin identity (pinned by `internal/plugin/plugin_test.go`):
-  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.5`, provider key
+  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.6`, provider key
   `chatgpt-proxy`,
   `GitHubRepository=https://github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin`
   (the host `validPlugin` gate rejects an empty value).

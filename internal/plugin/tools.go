@@ -130,6 +130,47 @@ func appendUserBridge(messages []upstream.ConversationMessage) []upstream.Conver
 	return messages
 }
 
+// nudgeText is the single retry instruction for a tool call whose
+// parameters parsed to nothing (live evidence 2026-11-12: ~1-in-12 calls
+// arrived with an empty <parameters> block).
+const nudgeText = "Your last reply carried a tool call with empty parameters, so nothing was executed. " +
+	"Re-emit the same tool call with EVERY required parameter filled in, " +
+	"using the exact schema names and the protocol XML shown above."
+
+// turnNeedsNudge reports whether the assembled tool-mode reply carries at
+// least one call whose parameters parsed to nothing and the retry has not
+// been spent yet.
+func turnNeedsNudge(turn *textTurn, text string) bool {
+	if !turn.toolMode || turn.nudged {
+		return false
+	}
+	for _, call := range parseToolCalls(text) {
+		if len(call.args) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// applyNudge records the assistant reply (markup included, so the model
+// sees exactly what it sent) plus the nudge instruction, rebuilds the
+// upstream payload, and marks the retry as spent.
+func applyNudge(turn *textTurn, text string) {
+	turn.nudged = true
+	turn.messages = append(turn.messages,
+		upstream.ConversationMessage{Role: "assistant", Content: text},
+		upstream.ConversationMessage{Role: "user", Content: nudgeText})
+	payload, err := upstream.BuildConversationPayload(upstream.ConversationRequest{
+		Messages:       turn.messages,
+		Model:          turn.slug,
+		ThinkingEffort: turn.effort,
+	})
+	if err != nil {
+		return // unshapeable messages cannot happen here; keep the first reply
+	}
+	turn.payload = payload
+}
+
 // ---------------------------------------------------------------------------
 // Request shaping: the tool prompt.
 // ---------------------------------------------------------------------------

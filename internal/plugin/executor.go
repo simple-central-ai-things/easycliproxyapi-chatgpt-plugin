@@ -81,6 +81,20 @@ func (m *Manager) handleExecutorExecute(request []byte) ([]byte, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), turnBudget(turn.cfg))
 	defer cancel()
+	turn.nudgeRetry = func() (string, bool) {
+		// The retry runs the same start path (sentinel + stream + the
+		// 401 refresh-retry) with the nudged payload; a failed retry
+		// serves the first reply instead of failing the turn.
+		ch, err := m.runTextTurnStart(ctx, turn, req.HostCallbackID)
+		if err != nil {
+			return "", false
+		}
+		retryText, err := drainTextCompletion(ch, turn)
+		if err != nil {
+			return "", false
+		}
+		return retryText, true
+	}
 
 	if turn.searchMode {
 		// Web search runs to completion inside Handle (the whole prepare +
@@ -138,6 +152,20 @@ func (m *Manager) handleExecutorExecuteStream(request []byte) ([]byte, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), turnBudget(turn.cfg))
 
+	turn.nudgeRetry = func() (string, bool) {
+		// The retry runs the same start path (sentinel + stream + the
+		// 401 refresh-retry) with the nudged payload; a failed retry
+		// serves the first reply instead of failing the turn.
+		ch, err := m.runTextTurnStart(ctx, turn, req.HostCallbackID)
+		if err != nil {
+			return "", false
+		}
+		retryText, err := drainTextCompletion(ch, turn)
+		if err != nil {
+			return "", false
+		}
+		return retryText, true
+	}
 	if turn.searchMode {
 		// Streaming search is buffered (the whole run completes inside
 		// Handle, as tool turns are) and emits role/content, terminal,

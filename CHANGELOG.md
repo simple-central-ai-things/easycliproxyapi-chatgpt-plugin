@@ -2,6 +2,24 @@
 
 This file records user-facing release summaries.
 
+## v0.2.6 — 2026-11-12 (empty-args tool calls are repaired in-plugin)
+
+Live OpenCode session evidence (2026-11-12, `ses_e336ca8f...`): about 1 in 12
+tool calls arrived with EMPTY parameters — the client's patch/shell tool
+refused them with "Invalid arguments", and the model did not always repair
+the call on its own.
+
+- **Nudge retry (openai format).** When a tool-mode reply parses into a call
+  with no parameters, the plugin re-runs the turn ONCE upstream with the
+  assistant reply (markup included, so the model sees exactly what it sent)
+  plus a nudge instruction: re-emit the call with every required parameter
+  filled in. The repaired call — or the first reply when the retry fails —
+  is what the client receives. `nudge_retry_test.go` scripts a two-turn
+  upstream and pins the retry, the rebuilt payload and the repaired args.
+
+Offline: full suite green; deployed in-place (the prior build kept as
+`.bak-v0.2.5-20261112` on the deploy host).
+
 ## v0.2.5 — 2026-11-12 (the platform `<escape>` artifact no longer breaks tool calls)
 
 Live OpenCode session evidence (2026-11-12, `ses_e336ca8f...`): the v0.2.4

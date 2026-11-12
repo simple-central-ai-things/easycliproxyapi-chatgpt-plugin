@@ -2,6 +2,21 @@
 
 This file records user-facing release summaries.
 
+## v0.2.8 — 2026-11-12 (markup-only empty replies are re-run once)
+
+Tools-e2e runner evidence (2026-11-12, sessions test-6 / test-11): the model
+answered some turns with ONLY platform markup (`<escape></escape>`), which
+strips to nothing — the client received an empty answer and the turn ended
+silently (6-7 output tokens, `finish_reason: stop`, zero parts).
+
+- **Empty-reply nudge.** A tool-mode reply with no parsed calls that strips
+  to empty whitespace now re-runs the turn once with a third nudge kind:
+  either emit the protocol XML or answer in plain prose. The three kinds
+  (empty parameters / fabricated attempt / markup-only empty) are all
+  pinned in `nudge_retry_test.go`; full suite green.
+
+Deployed in-place (prior build kept as `.bak-v0.2.7-20261112`).
+
 ## v0.2.7 — 2026-11-12 (fabricated-attempt prose is repaired with the no-call nudge)
 
 Tools-e2e runner evidence (2026-11-12, sessions under

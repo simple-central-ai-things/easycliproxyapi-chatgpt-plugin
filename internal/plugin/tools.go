@@ -147,6 +147,14 @@ const nudgeNoCall = "Your last reply described a tool attempt, but no tool-call 
 	"required parameter filled in using the exact schema names. If it genuinely " +
 	"needs no action, answer briefly."
 
+// nudgeEmptyReply is the retry instruction for the third failure kind (live
+// evidence 2026-11-12, tools-e2e test-6/test-11): a tool-mode reply whose
+// entire content is platform markup (<escape></escape>) - stripToolMarkup
+// leaves nothing, so the client receives an empty answer.
+const nudgeEmptyReply = "Your last reply contained no visible content, so nothing was delivered. " +
+	"If the request needs a tool, emit the protocol XML block now with every " +
+	"required parameter filled in. Otherwise answer the request in plain prose."
+
 // proseAttemptPhrases are the failure/attempt phrasings the no-call nudge
 // keys on; a tool-mode reply with no XML that mentions one is treated as a
 // fabricated attempt and re-run once.
@@ -177,8 +185,9 @@ func turnNeedsNudge(turn *textTurn, text string) bool {
 	}
 	calls := parseToolCalls(text)
 	if len(calls) == 0 {
-		// no XML at all: nudge only when the prose claims an attempt
-		return proseClaimsAttempt(text)
+		// no XML at all: nudge when the prose claims an attempt, or when the
+		// reply strips to nothing (markup-only answer, nothing delivered)
+		return proseClaimsAttempt(text) || strings.TrimSpace(stripToolMarkup(text)) == ""
 	}
 	for _, call := range calls {
 		if len(call.args) == 0 {
@@ -195,7 +204,11 @@ func applyNudge(turn *textTurn, text string) {
 	turn.nudged = true
 	nudge := nudgeEmptyArgs
 	if len(parseToolCalls(text)) == 0 {
-		nudge = nudgeNoCall
+		if strings.TrimSpace(stripToolMarkup(text)) == "" {
+			nudge = nudgeEmptyReply
+		} else {
+			nudge = nudgeNoCall
+		}
 	}
 	turn.messages = append(turn.messages,
 		upstream.ConversationMessage{Role: "assistant", Content: text},

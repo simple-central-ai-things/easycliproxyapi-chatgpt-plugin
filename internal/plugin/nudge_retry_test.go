@@ -179,3 +179,34 @@ func TestApplyNudgeProseKind(t *testing.T) {
 		t.Fatalf("nudge = %q, want the empty-args nudge", turn2.messages[2].Content)
 	}
 }
+
+func TestTurnNeedsNudgeStrippedEmptyReply(t *testing.T) {
+	turn := &textTurn{toolMode: true,
+		messages: []upstream.ConversationMessage{{Role: "user", Content: "hi"}}}
+	// the live shape (tools-e2e test-11 / test-6, 2026-11-12): the whole
+	// reply is platform escape markup - it strips to nothing
+	if !turnNeedsNudge(turn, "<escape></escape>") {
+		t.Fatal("a stripped-empty reply must warrant the nudge")
+	}
+	if !turnNeedsNudge(turn, "  \n<escape>helloworld</escape>\n  ") {
+		t.Fatal("markup-only reply must warrant the nudge")
+	}
+	// real content (prose or XML) never nudges for emptiness
+	if turnNeedsNudge(turn, "Here is the answer.") {
+		t.Fatal("visible prose must not trigger the empty-reply nudge")
+	}
+	plain := &textTurn{
+		messages: []upstream.ConversationMessage{{Role: "user", Content: "hi"}}}
+	if turnNeedsNudge(plain, "<escape></escape>") {
+		t.Fatal("non-tool-mode turns never nudge")
+	}
+}
+
+func TestApplyNudgeEmptyReplyKind(t *testing.T) {
+	turn := &textTurn{toolMode: true, slug: "gpt-6",
+		messages: []upstream.ConversationMessage{{Role: "user", Content: "do it"}}}
+	applyNudge(turn, "<escape></escape>")
+	if turn.messages[2].Content != nudgeEmptyReply {
+		t.Fatalf("nudge = %q, want the empty-reply nudge", turn.messages[2].Content)
+	}
+}

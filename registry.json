@@ -6,7 +6,7 @@
       "name": "ChatGPT Consumer Provider",
       "description": "ChatGPT consumer-account provider for EasyCLI/CLIProxyAPI v8: per-credential model discovery, streaming text conversation (openai, openai-response, and claude/Anthropic Messages formats), web search with cited answers, image generation/editing, password re-login, CPA/sub2api account imports, and subscription quota cards.",
       "author": "simple-central-ai-things",
-      "version": "0.2.7",
+      "version": "0.2.8",
       "repository": "https://github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin",
       "homepage": "https://github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin",
       "license": "MIT",

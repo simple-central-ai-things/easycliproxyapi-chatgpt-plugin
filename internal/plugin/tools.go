@@ -157,11 +157,19 @@ const nudgeEmptyReply = "Your last reply contained no visible content, so nothin
 
 // proseAttemptPhrases are the failure/attempt phrasings the no-call nudge
 // keys on; a tool-mode reply with no XML that mentions one is treated as a
-// fabricated attempt and re-run once.
+// fabricated attempt or a refusal to emit the call and re-run. The refusal
+// markers ("unable to", "not executed") were added from live evidence
+// 2026-11-12 (coding-task e2e on Claude Code / DSH): the model declined to
+// emit the tool call in prose with wording none of the attempt markers
+// matched, so the turn ended silently. Bare "can't"/"cannot" are deliberately
+// excluded — they appear in legitimate task prose and would over-trigger; the
+// no-call nudge carries the "answer briefly if no action is needed" escape, so
+// a false positive costs at most one bounded retry.
 var proseAttemptPhrases = []string{
 	"couldn't", "could not", "wasn't able", "was not able", "failed",
 	"failure", "no output", "not verified", "unavailable",
 	"is not available", "cannot access", "haven't received", "returned a",
+	"unable to", "not executed",
 }
 
 // proseClaimsAttempt reports whether the reply reads like a tool attempt or

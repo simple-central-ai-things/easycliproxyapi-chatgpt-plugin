@@ -2,6 +2,27 @@
 
 This file records user-facing release summaries.
 
+## v0.2.10 — 2026-11-12 (the nudge also catches a refusal to emit the tool call)
+
+Live evidence (2026-11-12, coding-task e2e on Claude Code and DSH against the
+same chatgpt model): on a complex multi-tool coding task the model declined to
+emit any tool-call XML and answered in prose — "I'm unable to emit a working
+tool call through the available interface, so nothing was created" — and the
+turn ended silently with no files. The no-call nudge keyed on attempt/failure
+markers ("couldn't", "failed", "is not available") but none matched that
+refusal wording, so it never fired.
+
+- **Refusal markers.** `proseAttemptPhrases` gains `unable to` and
+  `not executed`, the two refusal shapes observed in the transcripts, so a
+  tool-mode reply with no XML that declines the call now warrants the nudge and
+  the turn gets a recovery attempt (harness-agnostic — this is in the plugin's
+  tool-mode path, so it applies to every harness). Bare `can't`/`cannot` are
+  deliberately excluded: they appear in legitimate task prose and would
+  over-trigger. The no-call nudge already carries the "answer briefly if no
+  action is needed" escape, so a false positive costs at most one bounded retry.
+- Pinned by `nudge_retry_test.go`: the three captured refusal texts match,
+  and an informative reply that merely says `can't` about the task does not.
+
 ## v0.2.9 — 2026-11-12 (the nudge retries twice, the second time escalated)
 
 Live evidence (2026-11-12, tools-e2e retest of the subagent cell, session

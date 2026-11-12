@@ -185,6 +185,12 @@ func TestProseClaimsAttempt(t *testing.T) {
 		"I was not able to verify the output.",
 		"the tool is unavailable in this session",
 		"No output was obtained.",
+		// refusal-to-emit class (live evidence 2026-11-12, coding-task e2e on
+		// Claude Code / DSH): the model declines to emit the tool call in prose
+		// instead of a fabricated-attempt claim - same recovery applies
+		"I'm unable to emit a working filesystem tool call through the available interface, so no files have been created.",
+		"I'm unable to execute the file-writing action in this turn, so I can't truthfully report a test run.",
+		"The previous tool call was not executed. I don't have a working Bash execution interface available.",
 	} {
 		if !proseClaimsAttempt(prose) {
 			t.Fatalf("proseClaimsAttempt(%q) = false, want true", prose)
@@ -209,6 +215,16 @@ func TestTurnNeedsNudgeProseAttempt(t *testing.T) {
 	}
 	if turnNeedsNudge(turn, "Here is the file content you asked for.") {
 		t.Fatal("a plain informative prose reply must not warrant the nudge")
+	}
+	// the refusal-to-emit shape (no XML, prose declining the tool call) must
+	// warrant the nudge so the turn gets a recovery attempt
+	if !turnNeedsNudge(turn, "I'm unable to emit a working tool call through the available interface, so nothing was created.") {
+		t.Fatal("a prose refusal to emit the tool call must warrant the nudge")
+	}
+	// a legitimate answer that happens to contain \"can't\" about the TASK,
+	// not the tool, must not be mistaken for a refusal
+	if turnNeedsNudge(turn, "The triangle check passes; I can't find any failing case.") {
+		t.Fatal("an informative reply must not warrant the nudge")
 	}
 }
 

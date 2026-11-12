@@ -2,6 +2,26 @@
 
 This file records user-facing release summaries.
 
+## v0.2.12 — 2026-11-12 (the refusal nudge is structural, not phrase-matched)
+
+The v0.2.11 phrase widening still let DSH reword the same refusal past the
+markers ("I can't provide the exact test output until the files have actually
+been created") - proving a fixed phrase list is whack-a-mole against a model
+that rewords its refusal every run.
+
+- **Structural detector.** A no-tool-XML turn now warrants the nudge when the
+  reply is meta-commentary about an action that did not complete: a tooling
+  noun (`tool`/`command`/`file`/`run`/`execute`/…) paired with a
+  non-completion cue (`can't`/`unable`/`not yet`/`not been created`/…). The
+  combination - not any single phrase - is what signals a refusal, so
+  rewordings are caught. Cues stay multi-word where it matters so a legitimate
+  answer that merely contains "not" is not mistaken for one.
+- The exact-phrase list (v0.2.10-0.2.11) is kept for the fabricated-attempt
+  shape that carries no negation; the two are complementary.
+- Pinned by `nudge_retry_test.go` (the structural detector over four observed
+  rewordings plus six legitimate-answer controls; `turnNeedsNudge` over the
+  phrase-dodging refusal).
+
 ## v0.2.11 — 2026-11-12 (the master prompt forbids the prose refusal; the nudge catches more rewordings)
 
 Follow-up to v0.2.10, from the cross-harness coding-task e2e (Claude Code +

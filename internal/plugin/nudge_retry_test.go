@@ -208,11 +208,47 @@ func TestProseClaimsAttempt(t *testing.T) {
 	}
 }
 
+// proseToolRefusal is the structural detector for the refusal-to-emit shape:
+// the reply is meta-commentary about performing an action (a tooling noun) that
+// did not complete (a non-completion cue). It catches reworded refusals the
+// exact-phrase list misses - live evidence 2026-11-12 (DSH) rephrased the same
+// refusal as "I can't provide the exact test output until the files have
+// actually been created", which no proseAttemptPhrases entry matched.
+func TestProseToolRefusal(t *testing.T) {
+	for _, prose := range []string{
+		"I'm unable to emit a working filesystem tool call through the available interface, so no files have been created.",
+		"I can't provide the exact test output until the files have actually been created and the command has been executed.",
+		"The previous tool call was not executed, so I won't run anything further.",
+		"I have not been able to create the file yet.",
+	} {
+		if !proseToolRefusal(prose) {
+			t.Fatalf("proseToolRefusal(%q) = false, want true", prose)
+		}
+	}
+	for _, prose := range []string{
+		"Here is the answer: 42.",
+		"The test suite is green.",
+		"I created tri.py; here is the code.",
+		"The test run completed successfully with exit code 0.",
+		"The triangle check passes; I can't find any failing case.", // task 'can't', no tooling noun
+		"Let me read the file to see its content.",                 // tooling noun, but a plan to act, not a refusal
+	} {
+		if proseToolRefusal(prose) {
+			t.Fatalf("proseToolRefusal(%q) = true, want false", prose)
+		}
+	}
+}
+
 func TestTurnNeedsNudgeProseAttempt(t *testing.T) {
 	turn := &textTurn{toolMode: true,
 		messages: []upstream.ConversationMessage{{Role: "user", Content: "hi"}}}
 	if !turnNeedsNudge(turn, "The shell execution was attempted, but it failed. No output was obtained.") {
 		t.Fatal("a failed-attempt prose reply without XML must warrant the nudge")
+	}
+	// the reworded refusal that dodges the phrase list must still warrant the
+	// nudge via the structural detector
+	if !turnNeedsNudge(turn, "I can't provide the exact test output until the files have actually been created and the command has been executed.") {
+		t.Fatal("a reworded refusal (dodging the phrase list) must warrant the nudge")
 	}
 	if turnNeedsNudge(turn, "Here is the file content you asked for.") {
 		t.Fatal("a plain informative prose reply must not warrant the nudge")

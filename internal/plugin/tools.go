@@ -194,6 +194,42 @@ func proseClaimsAttempt(text string) bool {
 	return false
 }
 
+// refusalToolNouns are the action/tooling words a refusal-to-emit reply is
+// ABOUT; refusalNegCues are the non-completion words it pairs them with. The
+// structural detector (proseToolRefusal) keys on their COMBINATION, not on any
+// single phrase, so a reworded refusal ("can't provide the test output until
+// the files have actually been created") is still caught. Cues are multi-word
+// where it matters so a legitimate answer that merely contains "not" is not
+// mistaken for a refusal.
+var refusalToolNouns = []string{
+	"tool", "command", "execute", "execution", "run ", "file", "write",
+	"action", "shell", "code", "test", "create", "output", "interface",
+}
+
+var refusalNegCues = []string{
+	"can't", "cannot", "unable", "haven't", "hasn't", "didn't", "did not",
+	"won't", "will not", "failed", "refus", "not yet", "not been", "not able",
+	"not executed", "not run", "not created", "no working", "don't have",
+}
+
+func containsAny(lower string, words []string) bool {
+	for _, w := range words {
+		if strings.Contains(lower, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// proseToolRefusal reports whether the reply reads as meta-commentary about an
+// action that did not complete - a tooling noun paired with a non-completion
+// cue. This catches the refusal-to-emit shape that the exact-phrase list
+// (proseClaimsAttempt) misses when the model rewords it.
+func proseToolRefusal(text string) bool {
+	lower := strings.ToLower(text)
+	return containsAny(lower, refusalToolNouns) && containsAny(lower, refusalNegCues)
+}
+
 // turnNeedsNudge reports whether the assembled tool-mode reply carries at
 // least one call whose parameters parsed to nothing and the retry budget
 // (nudgeMaxRetries) is not spent yet.
@@ -203,9 +239,13 @@ func turnNeedsNudge(turn *textTurn, text string) bool {
 	}
 	calls := parseToolCalls(text)
 	if len(calls) == 0 {
-		// no XML at all: nudge when the prose claims an attempt, or when the
-		// reply strips to nothing (markup-only answer, nothing delivered)
-		return proseClaimsAttempt(text) || strings.TrimSpace(stripToolMarkup(text)) == ""
+		// no XML at all: nudge when the prose claims an attempt, reads as a
+		// refusal to emit the call (a reworded refusal dodges the phrase list,
+		// so the structural detector covers it), or strips to nothing
+		// (markup-only answer, nothing delivered)
+		return proseClaimsAttempt(text) ||
+			proseToolRefusal(text) ||
+			strings.TrimSpace(stripToolMarkup(text)) == ""
 	}
 	for _, call := range calls {
 		if len(call.args) == 0 {

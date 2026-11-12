@@ -177,10 +177,10 @@ func proseClaimsAttempt(text string) bool {
 }
 
 // turnNeedsNudge reports whether the assembled tool-mode reply carries at
-// least one call whose parameters parsed to nothing and the retry has not
-// been spent yet.
+// least one call whose parameters parsed to nothing and the retry budget
+// (nudgeMaxRetries) is not spent yet.
 func turnNeedsNudge(turn *textTurn, text string) bool {
-	if !turn.toolMode || turn.nudged {
+	if !turn.toolMode || turn.nudgeSpent >= nudgeMaxRetries {
 		return false
 	}
 	calls := parseToolCalls(text)
@@ -197,11 +197,25 @@ func turnNeedsNudge(turn *textTurn, text string) bool {
 	return false
 }
 
+// nudgeMaxRetries caps how many nudge retries one turn may spend. v0.2.8
+// allowed one; live evidence 2026-11-12 showed a fresh-quota model answering
+// the first nudge with another unusable reply, so v0.2.9 grants a second,
+// escalated retry.
+const nudgeMaxRetries = 2
+
+// nudgeEscalated is appended to the per-kind nudge on the SECOND retry
+// (nudgeSpent reaching nudgeMaxRetries): the demand states the consequence
+// and the exact required action, because the polite first nudge alone did
+// not always move the model.
+const nudgeEscalated = "\n\nThis is a second retry: your previous reply again carried no usable tool call. " +
+	"Emit the complete protocol XML block now with every required parameter filled in, " +
+	"or state plainly that the request cannot be completed."
+
 // applyNudge records the assistant reply (markup included, so the model
 // sees exactly what it sent) plus the nudge instruction, rebuilds the
-// upstream payload, and marks the retry as spent.
+// upstream payload, and spends one unit of the nudge budget.
 func applyNudge(turn *textTurn, text string) {
-	turn.nudged = true
+	turn.nudgeSpent++
 	nudge := nudgeEmptyArgs
 	if len(parseToolCalls(text)) == 0 {
 		if strings.TrimSpace(stripToolMarkup(text)) == "" {
@@ -209,6 +223,9 @@ func applyNudge(turn *textTurn, text string) {
 		} else {
 			nudge = nudgeNoCall
 		}
+	}
+	if turn.nudgeSpent >= nudgeMaxRetries {
+		nudge += nudgeEscalated
 	}
 	turn.messages = append(turn.messages,
 		upstream.ConversationMessage{Role: "assistant", Content: text},

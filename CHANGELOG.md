@@ -2,6 +2,28 @@
 
 This file records user-facing release summaries.
 
+## v0.2.9 — 2026-11-12 (the nudge retries twice, the second time escalated)
+
+Live evidence (2026-11-12, tools-e2e retest of the subagent cell, session
+`ses_e31a73778ffeT9j3ajZzEmYA4a`): the v0.2.8 nudge fires at most once, and
+BOTH attempts returned an unusable reply (turn 2 was again markup-only —
+`finish:stop`, 7 output tokens, zero parts). One polite retry is not always
+enough on a fresh-quota model.
+
+- **Nudge budget.** `textTurn.nudged bool` becomes `nudgeSpent int` with
+  `nudgeMaxRetries = 2`: a turn may be re-run twice, and only a twice-nudged
+  turn stops retrying.
+- **Escalated second nudge.** The second nudge appends an explicit demand
+  (state the exact required action or say plainly that the request cannot
+  be completed) to the per-kind instruction; the first nudge is unchanged.
+- The retry wiring needed no change: `nudgeRetry` already re-enters
+  `drainTextCompletion`, so the inner drain consults the same budget and
+  escalates itself.
+- Pinned by `nudge_retry_test.go`: budget thresholds (1 spent still retries,
+  2 spent never), escalation present only on the second nudge, and the full
+  three-turn scripted pipeline (empty → empty → good) answering the repaired
+  call with 3 conversation starts.
+
 ## v0.2.8 — 2026-11-12 (markup-only empty replies are re-run once)
 
 Tools-e2e runner evidence (2026-11-12, sessions test-6 / test-11): the model

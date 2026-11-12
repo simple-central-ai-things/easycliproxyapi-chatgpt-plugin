@@ -64,9 +64,9 @@ type textTurn struct {
 	// nudge retry can rebuild it with extra messages.
 	slug   string
 	effort string
-	// nudged marks the empty-args retry as spent; nudgeRetry, when set by
-	// the openai handler, re-runs the turn once and returns its text.
-	nudged     bool
+	// nudgeSpent counts the nudge retries spent; nudgeRetry, when set by
+	// the openai handler, re-runs the turn and returns its text.
+	nudgeSpent int
 	nudgeRetry func() (string, bool)
 }
 

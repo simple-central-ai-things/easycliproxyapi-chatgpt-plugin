@@ -101,7 +101,10 @@ const toolPromptFooter = "AFTER RESULTS\n" +
 	"files - you access them THROUGH this protocol.\n" +
 	"- After a tool result arrives, answer the user briefly. Do not re-call a tool that already " +
 	"succeeded.\n" +
-	"- Never claim a task is done without having emitted the tool-call XML for it."
+	"- Never claim a task is done without having emitted the tool-call XML for it.\n" +
+	"- NEVER answer in prose that you cannot use a tool, have not executed one, or failed to " +
+	"emit a call. That prose executes nothing and wastes the turn; when the task needs an " +
+	"action, your reply must be the protocol XML."
 
 // userBridge is the compact action-oriented reminder tool mode appends to
 // the LAST user message. Live evidence (PROVENANCE.md 2026-11-11) on a
@@ -113,7 +116,8 @@ const toolPromptFooter = "AFTER RESULTS\n" +
 const userBridge = "PROTOCOL REMINDER - this request needs action, and your reply must carry it:\n" +
 	"output ONLY the protocol XML block defined in your instructions, exactly as shown there " +
 	"(the " + toolCallToken + " tag, <tool_name>, and <parameters> with CDATA values). A reply " +
-	"without that XML block executes nothing."
+	"without that XML block executes nothing; prose saying you cannot or did not call a tool " +
+	"also executes nothing - emit the XML block."
 
 // appendUserBridge appends the bridge to the last user message (the folded
 // "Tool result" turn included) and leaves every other message untouched; it
@@ -170,6 +174,12 @@ var proseAttemptPhrases = []string{
 	"failure", "no output", "not verified", "unavailable",
 	"is not available", "cannot access", "haven't received", "returned a",
 	"unable to", "not executed",
+	// refusal-rephrase class (live evidence 2026-11-12, coding-task e2e): the
+	// model keeps rewording the same "I didn't/can't do the tool action"
+	// refusal, so the markers cover the observed phrasings, not bare "can't"
+	// (which appears in legitimate task prose and would over-trigger)
+	"haven't successfully", "not successfully", "truthfully report", "no files",
+	"not been created", "don't have a working", "no working",
 }
 
 // proseClaimsAttempt reports whether the reply reads like a tool attempt or

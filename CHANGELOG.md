@@ -2,6 +2,30 @@
 
 This file records user-facing release summaries.
 
+## v0.2.11 — 2026-11-12 (the master prompt forbids the prose refusal; the nudge catches more rewordings)
+
+Follow-up to v0.2.10, from the cross-harness coding-task e2e (Claude Code +
+DSH vs OpenCode, same account). Two reinforcing changes:
+
+- **Root (c) — the master names the refusal.** The variant-D footer RULES and
+  the recency-edge PROTOCOL REMINDER both now state that prose saying "you
+  cannot / have not executed / did not call a tool" executes nothing and wastes
+  the turn, and that a turn needing an action must be the protocol XML. A model
+  that is about to decline is told the refusal is itself a wasted turn.
+- **Robustness (b) — the recovery nudge catches rewordings.** The model
+  rephrases the same refusal every run ("haven't successfully executed", "no
+  files have been created", "I don't have a working … interface"), so
+  `proseAttemptPhrases` gains the observed refusal semantics. Bare "can't"/
+  "cannot" stay excluded (legitimate task prose over-triggers); the no-call
+  nudge's "answer briefly if no action is needed" escape bounds any false
+  positive to one retry.
+
+Both are pinned offline (`user_bridge_test.go` mandates the footer + bridge
+wording and the bridge's compactness; `nudge_retry_test.go` covers all four
+captured refusal texts plus a legitimate "can't find a case" control that must
+not trigger). Live re-verification is pending the account window reset — the
+changes reduce and recover the miss; a fully degraded model can still stall.
+
 ## v0.2.10 — 2026-11-12 (the nudge also catches a refusal to emit the tool call)
 
 Live evidence (2026-11-12, coding-task e2e on Claude Code and DSH against the

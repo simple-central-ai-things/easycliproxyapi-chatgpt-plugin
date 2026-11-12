@@ -37,7 +37,7 @@ import (
 const (
 	pluginID      = "easycliproxyapi-chatgpt-provider"
 	providerKey   = model.ProviderKey
-	pluginVersion = "0.2.10"
+	pluginVersion = "0.2.11"
 	githubRepo    = "https://github.com/simple-central-ai-things/easycliproxyapi-chatgpt-plugin"
 )
 

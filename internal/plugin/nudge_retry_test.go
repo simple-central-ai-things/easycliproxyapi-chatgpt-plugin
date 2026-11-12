@@ -191,6 +191,7 @@ func TestProseClaimsAttempt(t *testing.T) {
 		"I'm unable to emit a working filesystem tool call through the available interface, so no files have been created.",
 		"I'm unable to execute the file-writing action in this turn, so I can't truthfully report a test run.",
 		"The previous tool call was not executed. I don't have a working Bash execution interface available.",
+		"I haven't successfully executed the file operations or test command, so I can't truthfully report a final test output.",
 	} {
 		if !proseClaimsAttempt(prose) {
 			t.Fatalf("proseClaimsAttempt(%q) = false, want true", prose)

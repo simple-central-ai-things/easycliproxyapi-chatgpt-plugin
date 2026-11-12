@@ -22,6 +22,23 @@ func TestUserBridgeConstant(t *testing.T) {
 	}
 }
 
+// The refusal-to-emit shape (live evidence 2026-11-12, coding-task e2e on
+// Claude Code / DSH): the model declined to emit the tool XML and answered in
+// prose ("I can't / haven't executed a tool"). The master must name that prose
+// as a wasted turn and command the XML, both in the system footer and the
+// recency-edge bridge.
+func TestPromptForbidsProseRefusal(t *testing.T) {
+	if !strings.Contains(toolPromptFooter, "NEVER answer in prose that you cannot use a tool") {
+		t.Fatalf("toolPromptFooter RULES must forbid prose refusal to use a tool:\n%s", toolPromptFooter)
+	}
+	if !strings.Contains(userBridge, "prose saying you cannot or did not call a tool also executes nothing") {
+		t.Fatalf("userBridge must name the prose refusal as executing nothing:\n%s", userBridge)
+	}
+	if len(userBridge) > 600 {
+		t.Fatalf("userBridge must stay compact after the refusal clause: %d chars", len(userBridge))
+	}
+}
+
 func TestAppendUserBridgeLastUser(t *testing.T) {
 	in := []upstream.ConversationMessage{
 		{Role: "system", Content: "client system"},

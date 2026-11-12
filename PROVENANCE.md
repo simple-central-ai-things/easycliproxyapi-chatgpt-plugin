@@ -613,3 +613,37 @@ verdict requires the account window to reset** — re-run
 `zsh ~/.cache/opencode/tmp/run-coding-test.sh` and
 `zsh ~/.cache/opencode/tmp/run-tools-test.sh` then.
 
+
+## Model-tier is the dominant reliability variable (2026-11-13)
+
+The cross-harness coding/tool failures were initially attributed to account
+degradation. That was wrong: a live quota fetch on 2026-11-13 showed the
+account is **Plus** with every rate-limit bucket at `remainingFraction: 1`
+(100% remaining) — no quota wall. On that fresh account, the *same* tasks were
+still stochastic with `gpt-6:free`: Claude Code coding failed, grep/subagent/
+skill failed with an "affirmative intent without action" shape ("I'll move
+t1.txt…" then no tool call, t1.txt still present).
+
+Comparing the failure shapes on **`gpt-6-thinking`** (reasoning variant), same
+fresh account:
+
+| task | gpt-6:free | gpt-6-thinking |
+|---|---|---|
+| coding (tri.py + test) | flaky (fails in sequence) | PASS (CORRECTNESS-OK, exit 0) |
+| grep | FAIL (intent, no call) | PASS |
+| subagent | FAIL | PASS |
+| skill safe-delete | FAIL | FAIL (1/4 residual) |
+
+**Conclusion:** tool-emission reliability is dominated by the MODEL TIER, not
+the plugin, harness, or quota. `gpt-6-thinking` reliably emits tool calls for
+complex agentic tasks; `gpt-6:free` narrates intent or refuses instead. The
+plugin's nudge/prompt hardening (v0.2.9-0.2.12) recovers the refusal/empty/
+markup shapes and is most valuable for weaker models, but it cannot make a
+stochastic model reliable. The residual "affirmative intent without action"
+shape (no negation cue) is not caught by the refusal trigger and recurs even
+occasionally on gpt-6-thinking; catching it generically would false-positive on
+legitimate "I'll report…" answers, so it is intentionally not phrase-matched.
+
+**Recommendation:** route tool-heavy agentic work to a reasoning model
+(gpt-6-thinking or equivalent); the plugin then supports it reliably across
+harnesses.

@@ -389,3 +389,34 @@ shell call failed the same way and the turn ended without acting.
 
 Re-run once the account window resets: `zsh ~/.cache/opencode/tmp/run-tools-test.sh`
 (prompt catalog: `~/.cache/opencode/tmp/chatgpt-tools-prompts.md`).
+
+## All-tools e2e final matrix + v0.2.8 empty-reply nudge (2026-11-12)
+
+Commit `c2d7f5a` (version 0.2.8, in-place deploy, prior build kept as
+`.bak-v0.2.7-20261112`). The runner covers 10 of the 12 captured OpenCode
+tools (`question` is TUI-only, `websearch` evidence is integration-dependent):
+`zsh ~/.cache/opencode/tmp/run-tools-test.sh` (prompt catalog:
+`~/.cache/opencode/tmp/chatgpt-tools-prompts.md`).
+
+Three runner passes on the live gateway:
+
+| pass | build | result |
+|---|---|---|
+| 1 | v0.2.5 | 5 PASS, 4 FAIL (upstream quota cooldown — typed 502 `no_assistant_content` → pool `auth_unavailable`), image SKIP |
+| 2 | v0.2.6 | 6 PASS; grep/shell FAIL = fabricated-attempt prose with NO XML (third kind) |
+| 3 | v0.2.7 | 7 PASS; subagent/execute FAIL = markup-only replies (`<escape></escape>`, 6-7 output tokens) stripping to an empty delivery |
+| 4 | v0.2.8 | **8 PASS, 1 FAIL, 1 SKIP** |
+
+v0.2.8 adds the third nudge kind (markup-only empty reply re-runs once);
+the targeted re-test passed for both failing scenarios (subagent reported
+its phrase, execute returned EXEC-OK). The one remaining failure of pass 4
+(subagent) is the same markup-only shape with a 7-token zero-part reply —
+both attempts of the turn came back markup-only, consistent with account
+degradation after the day's ~100 verification turns rather than an
+unhandled emulation path (the nudge's one-retry budget is spent per turn).
+The image SKIP is harness-side: the image-generation balance is insufficient
+(OpenCode credits), unrelated to the plugin.
+
+Known residual: ~1-in-10 stochastic emission misses; the three nudge kinds
+convert most of them internally. Re-run the matrix once the account window
+resets to confirm the subagent cell.

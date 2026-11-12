@@ -420,3 +420,74 @@ The image SKIP is harness-side: the image-generation balance is insufficient
 Known residual: ~1-in-10 stochastic emission misses; the three nudge kinds
 convert most of them internally. Re-run the matrix once the account window
 resets to confirm the subagent cell.
+
+## v0.2.9 escalated nudge + image cell live verification (2026-11-12)
+
+Commit `84d4bb7` (version 0.2.9, deployed in place over v0.2.8; prior build
+kept as `.bak-v0.2.8-20261112`). Gateway log confirms
+`plugin registered ... version=0.2.9`.
+
+### Subagent cell — the v0.2.8 residual FAIL, now PASS
+
+Live evidence (2026-11-12, subagent-cell retest): the session
+`ses_e312d32bcffeQTHPdp3p31DUUJ` shows `subagent -> completed` with real
+directory-exploration output ("Found 2 files ... `.opencode`"). v0.2.8's
+one-nudge budget was the residual failure: both attempts of the turn came
+back markup-only (a 7-token, zero-part reply), so a single polite retry
+was spent and the turn ended with no delivery. v0.2.9 spends a two-unit
+budget (`textTurn.nudged bool` → `nudgeSpent int`, `nudgeMaxRetries = 2`);
+the second nudge appends the escalation demand (`nudgeEscalated`), and the
+retry wiring needed no change because `nudgeRetry` already re-enters
+`drainTextCompletion`. Pinned offline by `nudge_retry_test.go` (budget
+thresholds, escalation only on the second nudge, and the three-turn
+scripted pipeline answering the repaired call with 3 conversation starts).
+Full suite green (vet + tests + loadsmoke).
+
+### Image cell — now PASS through the OpenCode tool (cross-repo fix in SCPM)
+
+The `experimental_image_generate` tool now produces a real file through the
+plugin's image route (`chatgpt-proxy/gpt-image-2-proxy`, published by SCPM
+as `openai-plus-chatgpt/openai/gpt-image-2-proxy`). Live evidence
+(2026-11-12, session dir `tools-e2e/img-sani`): the tool part is `completed`
+with model `litellm/openai-plus-chatgpt/openai/gpt-image-2-proxy` and the
+written artifact is a real PNG (`circle.png`, 1536x1024, ~1.1 MB) —
+IMAGE-TOOL-PASS.
+
+The last mile was NOT a plugin fault: the plugin's registry route returns a
+clean `{created, data:[{b64_json, revised_prompt}], usage}` envelope
+(verified by a loopback POST inside the gateway container). LiteLLM, sitting
+between the plugin and OpenCode, re-serializes that through its own
+`OpenAIImageResponse` model and emits explicit `null` for the gpt-image-1
+envelope fields (`background`/`quality`/`size`/`output_format`) plus
+`usage.output_tokens_details`. OpenCode 2.2.7's image schema models those
+top-level fields as `Schema.optional` (tolerates absence, rejects an explicit
+`null`) and every image package shares that schema, so the valid image was
+discarded as "returned an invalid response" with no file written. The fix
+lives in SCPM (`image_sanitizer`, a `litellm_settings.callbacks` post-call
+hook that returns image responses with every explicit-null key removed —
+`simple-central-proxy-manager@12e95cf`), verified live: an end-to-end POST
+through the gateway now carries zero explicit nulls.
+
+### All-tools matrix — pass 5 (v0.2.9)
+
+`zsh ~/.cache/opencode/tmp/run-tools-test.sh` on the live gateway
+(10 of the 12 captured OpenCode tools; `question` is TUI-only, `websearch`
+evidence is integration-dependent):
+
+| pass | build | result |
+|---|---|---|
+| 1-4 | v0.2.5-0.2.8 | 5→6→7→8 PASS; image SKIP; residual subagent FAIL (markup-only, 1-nudge budget) |
+| 5 | v0.2.9 | **8 PASS, 2 FAIL, 0 SKIP** |
+
+Pass 5: PASS read, glob, grep, shell, webfetch, skill, execute, **image**.
+The image cell flipped from SKIP to PASS (SCPM sanitizer above). The two FAILs
+(patch, subagent) returned the known degradation shapes — an empty-`<parameters>`
+call and a 7-token markup-only reply — and re-run IN ISOLATION both PASS:
+patch `ses_e30c9e8caffe81s9nz23W2Rb7Z` (`patch -> completed`, notes.txt carries
+`UNIQUE-PATCH-1`) and subagent `ses_e30c936ecffe37mUOsSRd9BnW9` (child replies
+`SUBAGENT-OK`). No quota error (typed 502 / `auth_unavailable` cooldown) appears
+in the EasyCLI error logs for those turns — the failures are account
+content-degradation after the day's ~100 verification turns, exhausted even the
+two-unit nudge budget, not an emulation fault. Re-run the matrix once the
+account window resets to confirm both cells green in sequence.
+

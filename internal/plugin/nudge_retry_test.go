@@ -128,3 +128,54 @@ func TestToolsEmptyArgsNudgeRetry(t *testing.T) {
 		t.Fatalf("arguments = %q, want the retry's parameters", msg.ToolCalls[0].Function.Arguments)
 	}
 }
+
+func TestProseClaimsAttempt(t *testing.T) {
+	for _, prose := range []string{
+		"The grep command failed, so I can\u0027t quote the matching line.",
+		"I couldn\u0027t run that; the execution environment returned a ServerError.",
+		"I was not able to verify the output.",
+		"the tool is unavailable in this session",
+		"No output was obtained.",
+	} {
+		if !proseClaimsAttempt(prose) {
+			t.Fatalf("proseClaimsAttempt(%q) = false, want true", prose)
+		}
+	}
+	for _, prose := range []string{
+		"The test suite is green.",
+		"Here is the answer: 42.",
+		"",
+	} {
+		if proseClaimsAttempt(prose) {
+			t.Fatalf("proseClaimsAttempt(%q) = true, want false", prose)
+		}
+	}
+}
+
+func TestTurnNeedsNudgeProseAttempt(t *testing.T) {
+	turn := &textTurn{toolMode: true,
+		messages: []upstream.ConversationMessage{{Role: "user", Content: "hi"}}}
+	if !turnNeedsNudge(turn, "The shell execution was attempted, but it failed. No output was obtained.") {
+		t.Fatal("a failed-attempt prose reply without XML must warrant the nudge")
+	}
+	if turnNeedsNudge(turn, "Here is the file content you asked for.") {
+		t.Fatal("a plain informative prose reply must not warrant the nudge")
+	}
+}
+
+func TestApplyNudgeProseKind(t *testing.T) {
+	turn := &textTurn{toolMode: true, slug: "gpt-6",
+		messages: []upstream.ConversationMessage{{Role: "user", Content: "do it"}}}
+	reply := "I couldn\u0027t run the command; it failed."
+	applyNudge(turn, reply)
+	if turn.messages[2].Content != nudgeNoCall {
+		t.Fatalf("nudge = %q, want the no-call nudge", turn.messages[2].Content)
+	}
+	// the empty-args kind is unchanged
+	turn2 := &textTurn{toolMode: true, slug: "gpt-6",
+		messages: []upstream.ConversationMessage{{Role: "user", Content: "do it"}}}
+	applyNudge(turn2, nudgeEmptyArgsXML())
+	if turn2.messages[2].Content != nudgeEmptyArgs {
+		t.Fatalf("nudge = %q, want the empty-args nudge", turn2.messages[2].Content)
+	}
+}

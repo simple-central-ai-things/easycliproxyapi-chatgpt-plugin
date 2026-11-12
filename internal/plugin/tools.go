@@ -133,9 +133,40 @@ func appendUserBridge(messages []upstream.ConversationMessage) []upstream.Conver
 // nudgeText is the single retry instruction for a tool call whose
 // parameters parsed to nothing (live evidence 2026-11-12: ~1-in-12 calls
 // arrived with an empty <parameters> block).
-const nudgeText = "Your last reply carried a tool call with empty parameters, so nothing was executed. " +
+const nudgeEmptyArgs = "Your last reply carried a tool call with empty parameters, so nothing was executed. " +
 	"Re-emit the same tool call with EVERY required parameter filled in, " +
 	"using the exact schema names and the protocol XML shown above."
+
+// nudgeNoCall is the retry instruction for the second failure kind (live
+// evidence 2026-11-12, tools-e2e runner): a tool-mode reply that carries NO
+// protocol XML at all but claims a tool was attempted or failed ("The grep
+// command failed..." with no call emitted). The model fabricated the attempt;
+// nothing was executed, so the turn is re-run with this instruction.
+const nudgeNoCall = "Your last reply described a tool attempt, but no tool-call XML was emitted, so nothing was executed. " +
+	"If the request needs a tool, emit the protocol XML block now with every " +
+	"required parameter filled in using the exact schema names. If it genuinely " +
+	"needs no action, answer briefly."
+
+// proseAttemptPhrases are the failure/attempt phrasings the no-call nudge
+// keys on; a tool-mode reply with no XML that mentions one is treated as a
+// fabricated attempt and re-run once.
+var proseAttemptPhrases = []string{
+	"couldn't", "could not", "wasn't able", "was not able", "failed",
+	"failure", "no output", "not verified", "unavailable",
+	"is not available", "cannot access", "haven't received", "returned a",
+}
+
+// proseClaimsAttempt reports whether the reply reads like a tool attempt or
+// failure claim (matched case-insensitively).
+func proseClaimsAttempt(text string) bool {
+	lower := strings.ToLower(text)
+	for _, phrase := range proseAttemptPhrases {
+		if strings.Contains(lower, phrase) {
+			return true
+		}
+	}
+	return false
+}
 
 // turnNeedsNudge reports whether the assembled tool-mode reply carries at
 // least one call whose parameters parsed to nothing and the retry has not
@@ -144,7 +175,12 @@ func turnNeedsNudge(turn *textTurn, text string) bool {
 	if !turn.toolMode || turn.nudged {
 		return false
 	}
-	for _, call := range parseToolCalls(text) {
+	calls := parseToolCalls(text)
+	if len(calls) == 0 {
+		// no XML at all: nudge only when the prose claims an attempt
+		return proseClaimsAttempt(text)
+	}
+	for _, call := range calls {
 		if len(call.args) == 0 {
 			return true
 		}
@@ -157,9 +193,13 @@ func turnNeedsNudge(turn *textTurn, text string) bool {
 // upstream payload, and marks the retry as spent.
 func applyNudge(turn *textTurn, text string) {
 	turn.nudged = true
+	nudge := nudgeEmptyArgs
+	if len(parseToolCalls(text)) == 0 {
+		nudge = nudgeNoCall
+	}
 	turn.messages = append(turn.messages,
 		upstream.ConversationMessage{Role: "assistant", Content: text},
-		upstream.ConversationMessage{Role: "user", Content: nudgeText})
+		upstream.ConversationMessage{Role: "user", Content: nudge})
 	payload, err := upstream.BuildConversationPayload(upstream.ConversationRequest{
 		Messages:       turn.messages,
 		Model:          turn.slug,

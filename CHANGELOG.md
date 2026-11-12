@@ -2,6 +2,25 @@
 
 This file records user-facing release summaries.
 
+## v0.2.7 — 2026-11-12 (fabricated-attempt prose is repaired with the no-call nudge)
+
+Tools-e2e runner evidence (2026-11-12, sessions under
+`~/.cache/opencode/tmp/tools-e2e/`): the v0.2.6 loop passed read/glob/patch/
+subagent/webfetch/execute, but the grep and shell turns failed with a second
+failure kind — the model emitted NO protocol XML yet claimed an attempt ("The
+grep command failed, so I can't quote the matching line"; "the execution
+environment returned a `ServerError`"), so nothing was executed and the agent
+ended the turn on the fabrication.
+
+- **No-call nudge.** A tool-mode reply without any parsed call whose prose
+  carries a failure/attempt phrasing ("failed", "couldn't", "no output",
+  "unavailable", ...) now re-runs the turn once with the assistant reply plus
+  a nudge that says nothing was executed and points at the protocol XML.
+  Informative prose without such phrasing never nudges. `nudge_retry_test.go`
+  pins both nudge kinds and the phrase gate; full suite green.
+
+Deployed in-place (prior build kept as `.bak-v0.2.6-20261112`).
+
 ## v0.2.6 — 2026-11-12 (empty-args tool calls are repaired in-plugin)
 
 Live OpenCode session evidence (2026-11-12, `ses_e336ca8f...`): about 1 in 12

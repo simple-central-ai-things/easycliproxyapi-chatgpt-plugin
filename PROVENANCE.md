@@ -528,3 +528,36 @@ in a `--patch` overlay (`disabled: true`) makes the payload fit and both
 smokes pass. The model route itself resolves correctly — the 413 is the
 backend rejecting an oversized body, which is a harness-config issue, not an
 emulation fault.
+
+## Coding-task e2e — Claude Code + DSH vs OpenCode (2026-11-12, degradation-pending-retest)
+
+A real agentic coding task (write `tri.py` + `test_tri.py`, run the test, fix
+until it passes) was run against the same chatgpt model
+(`openai-plus-chatgpt/openai/gpt-6:free`) through Claude Code, DSH and OpenCode,
+each verified independently (a file-existence + correctness probe + a re-run of
+the agent's own test — agent prose is never trusted as evidence).
+
+| harness | result | evidence |
+|---|---|---|
+| OpenCode | PASS | `tri.py` + `test_tri.py` created, correctness probe OK, test exits 0 |
+| Claude Code | NO-FILES | model emitted zero `tool_use` blocks; prose only |
+| DSH | NO-FILES | model emitted zero `tool_use` blocks; prose only |
+
+Diagnosis: **content degradation, not a protocol/transport fault.** The Claude
+Code session transcripts contain only a single assistant text message and no
+`tool_use` at all — on one run the model even referred to "the previous tool
+call was not executed" with no prior call in the transcript (fabricated-attempt
+shape). A protocol fault would surface as an emitted-but-rejected `tool_use` +
+failed `tool_result`; that is absent. The earlier simple smokes (an explicit
+`echo` Bash call and a subagent delegation) DID emit real `tool_use` in all
+three harnesses, so tool emission works — only the complex multi-tool coding
+task degraded into prose. DSH failing on the same openai-completions path
+OpenCode passed rules out a path-specific cause.
+
+This matches the residual documented since v0.2.6: stochastic emission misses
+that grow as the account degrades (the day's ~150 verification turns). The
+nudge budget targets empty-args / no-call-XML / markup-only shapes, not a model
+that cleanly declines in prose, so this shape is not intercepted.
+
+Re-test once the account window resets to give a clean per-harness coding
+verdict: `zsh ~/.cache/opencode/tmp/run-coding-test.sh`.

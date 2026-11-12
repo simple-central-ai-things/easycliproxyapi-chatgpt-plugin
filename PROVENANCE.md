@@ -491,3 +491,40 @@ content-degradation after the day's ~100 verification turns, exhausted even the
 two-unit nudge budget, not an emulation fault. Re-run the matrix once the
 account window resets to confirm both cells green in sequence.
 
+
+## Cross-harness verification — Claude Code + DSH (2026-11-12)
+
+The tool-calling and subagent capabilities were verified through two more
+harnesses against the same chatgpt-proxy model
+(`openai-plus-chatgpt/openai/gpt-6:free`), both reaching the plugin through
+SCPM's LiteLLM gateway on `:31003`. Codex was excluded by operator choice;
+Antigravity is not wired to SCPM's OpenAI chat models (Gemini-based); image is
+OpenCode-specific.
+
+| harness | protocol path | tool-calling | subagent |
+|---|---|---|---|
+| OpenCode | openai-completions (direct) | PASS | PASS |
+| Claude Code | Anthropic Messages → LiteLLM translate → openai | PASS | PASS |
+| DSH | openai-completions (direct) | PASS | PASS |
+
+Evidence (each run forced a real tool call and a delegation, checking the
+executed side-effect / child reply, not model prose):
+
+- **Claude Code** (`claude --model .../gpt-6:free -p`): a Bash tool call ran
+  `echo CC-TOOL-EVIDENCE-42` and Claude Code rendered its tool result; the
+  Task subagent replied `CC-SUBAGENT-OK` verbatim. This is the distinct path —
+  Anthropic `tool_use` is translated by LiteLLM to an OpenAI `tools` array,
+  emulated by the plugin's XML protocol, and translated back, so it proves the
+  emulation survives protocol translation, not just the direct openai path.
+- **DSH** (`dsh --profile headless --patch <overlay>`): a shell tool call ran
+  `echo DSH-TOOL-EVIDENCE-42`; the subagent tool delegated and the child
+  replied `DSH-SUBAGENT-OK` verbatim.
+
+DSH finding (config, not plugin): the default headless profile auto-loads ~17
+MCP servers whose tool schemas bloat the first request body past the chatgpt
+model's accepted payload size, so the very first turn fails with a typed
+`payload_too_large` (HTTP 413) before any tool call. Disabling the MCP servers
+in a `--patch` overlay (`disabled: true`) makes the payload fit and both
+smokes pass. The model route itself resolves correctly — the 413 is the
+backend rejecting an oversized body, which is a harness-config issue, not an
+emulation fault.

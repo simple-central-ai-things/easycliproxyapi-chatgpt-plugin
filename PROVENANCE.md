@@ -561,3 +561,55 @@ that cleanly declines in prose, so this shape is not intercepted.
 
 Re-test once the account window resets to give a clean per-harness coding
 verdict: `zsh ~/.cache/opencode/tmp/run-coding-test.sh`.
+
+## Cross-harness coding-task fix — structural refusal nudge (v0.2.11 + v0.2.12, 2026-11-12)
+
+The coding-task e2e (write `tri.py` + `test_tri.py`, run, fix until passing)
+initially failed on Claude Code and DSH but passed on OpenCode, in the same
+run on the same account, with DSH sharing OpenCode's openai-completions path —
+so the refusal was harness-context-sensitive, not a protocol or pure account
+issue. The transcripts showed the failure shape precisely: the model emitted
+ZERO `tool_use` blocks and answered in prose declining the tool call, then
+stopped. Each retry reworded the refusal, dodging the v0.2.10/0.2.11 phrase
+list.
+
+Two reinforcing fixes, TDD'd and deployed:
+
+- **v0.2.11** — the variant-D footer RULES and the recency-edge PROTOCOL
+  REMINDER now name prose refusal ("cannot / have not executed / did not call a
+  tool") as a wasted turn that must be the protocol XML; the refusal phrase
+  list widened. Live: this flipped the **Claude Code** coding task from refusal
+  to PASS (2 real `tool_use` Bash blocks, correct files, `test_tri.py` exits 0,
+  verified independently — not trusted from the model's prose).
+- **v0.2.12** — replaced the phrase whack-a-mole with a **structural detector**:
+  a no-XML turn warrants the nudge when the reply pairs a tooling noun
+  (`tool`/`command`/`file`/`run`/`execute`/…) with a non-completion cue
+  (`can't`/`unable`/`not yet`/`not been created`/…). The *combination* signals a
+  refusal, so rewordings are caught; multi-word cues keep legitimate answers
+  that merely contain "not" untriggered. Live: this flipped the **DSH** coding
+  task from refusal to PASS (controlled delta — v0.2.11 refused, v0.2.12 passed,
+  same account minutes apart, only the trigger changed), confirming DSH's
+  failure was the reworded-refusal gap, not a deeper prompt conflict.
+
+### Full coding matrix on v0.2.12 (current, heavily-degraded account)
+
+`run-coding-test.sh` (Claude Code → DSH → OpenCode, sequential): Claude Code
+PASS (CORRECTNESS-OK, test exit 0); DSH and OpenCode produced no files. Their
+failure shapes were NEW, not the refusal:
+
+- DSH: "I'll create both files… and run the requested test command" — a
+  plan-description with no tool call and no refusal cue (it sounds confident, so
+  the trigger correctly does not fire).
+- OpenCode: "Approve this design so I can proceed?" — an approval-seeking
+  posture that stops waiting for a reply that never arrives in headless mode.
+
+This is the degradation long-tail: a ~200-turn-degraded account emits
+tool-emission failures in novel, per-run shapes (refusal, plan-description,
+approval-seeking) that no fixed trigger set can enumerate without over-fitting to
+today's artifacts and risking false positives on a healthy account. The
+structural refusal detector (v0.2.12) addresses the dominant documented shape and
+is verified on Claude Code and DSH in isolation. **A clean per-harness coding
+verdict requires the account window to reset** — re-run
+`zsh ~/.cache/opencode/tmp/run-coding-test.sh` and
+`zsh ~/.cache/opencode/tmp/run-tools-test.sh` then.
+

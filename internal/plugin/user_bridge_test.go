@@ -17,7 +17,7 @@ func TestUserBridgeConstant(t *testing.T) {
 	if !strings.Contains(userBridge, scramOpen) {
 		t.Fatalf("userBridge must reference the scrambled contract tag")
 	}
-	if len(userBridge) > 800 {
+	if len(userBridge) > 900 {
 		t.Fatalf("userBridge must stay compact (this is a reminder, not the master): %d chars", len(userBridge))
 	}
 }
@@ -34,7 +34,7 @@ func TestPromptForbidsProseRefusal(t *testing.T) {
 	if !strings.Contains(userBridge, "prose saying you cannot or did not call a tool also executes nothing") {
 		t.Fatalf("userBridge must name the prose refusal as executing nothing:\n%s", userBridge)
 	}
-	if len(userBridge) > 800 {
+	if len(userBridge) > 900 {
 		t.Fatalf("userBridge must stay compact: %d chars", len(userBridge))
 	}
 }
@@ -81,8 +81,13 @@ func TestBridgeCarriesEngineeringPrinciples(t *testing.T) {
 	if !strings.Contains(userBridge, "did not observe") {
 		t.Fatalf("bridge must forbid reporting unobserved output:\n%s", userBridge)
 	}
+	// start-now kick: the first reply must be the first tool call (the V2
+	// task-prompt lever the generic principles lacked)
+	if !strings.Contains(userBridge, "your very first reply the tool call") {
+		t.Fatalf("bridge must tell the model to start with the first tool call now:\n%s", userBridge)
+	}
 	// the bridge stays a reminder, not the master
-	if len(userBridge) > 800 {
+	if len(userBridge) > 900 {
 		t.Fatalf("bridge must stay compact: %d chars", len(userBridge))
 	}
 }

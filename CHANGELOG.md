@@ -2,6 +2,17 @@
 
 This file records user-facing release summaries.
 
+## v0.2.15 — 2026-11-13 (the bridge tells the model to start with the first tool call now)
+
+The clean re-assessment showed the generic bridge principles alone left models
+narrating/refusing on multi-step tasks: the bridge said "emit the NEXT step" but
+never told the model to START. The engineered task prompt that worked (V2) had
+the task-structure kick the bridge lacked. The bridge now ends with: "Begin NOW:
+break the task into steps and make your very first reply the tool call that
+performs the first step." This supplies the start-now / first-output-is-a-tool-
+call structure at the user-message recency position, harness- and
+model-agnostic. Bridge compactness bound rises 800 → 900.
+
 ## v0.2.14 — 2026-11-13 (the engineering principles move to the user bridge)
 
 The all-models eval showed the benefit of the coding-prompt principles (act

@@ -124,7 +124,8 @@ const userBridge = "PROTOCOL REMINDER - this request needs action, and your repl
 	"also executes nothing - emit the XML block. Act, don't narrate: for the next step emit the " +
 	"tool call, do not describe it in prose. If the task still has steps left, emit the next " +
 	"tool call now - do not stop and wait. Report only what a tool result actually showed you; " +
-	"never claim an output you did not observe."
+	"never claim an output you did not observe. Begin NOW: break the task into steps and make " +
+	"your very first reply the tool call that performs the first step."
 
 // appendUserBridge appends the bridge to the last user message (the folded
 // "Tool result" turn included) and leaves every other message untouched; it

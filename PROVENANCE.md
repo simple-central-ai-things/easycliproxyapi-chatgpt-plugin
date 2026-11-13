@@ -714,3 +714,39 @@ full reasoning variants sit above what prompt engineering can move.
 Net: the engineering principles now ship in the plugin's user bridge,
 harness- and model-agnostic; the flippable models become usable with no per-task
 prompt, and the residual failures are model-tier-limited.
+
+## CORRECTION: failures are at 100% quota, and are stochastic — not degradation (2026-11-13)
+
+A clean re-assessment (all plain models, plain task, v0.2.14 bridge, verified
+independently) returned **0/10 pass**. A live quota fetch immediately after
+confirmed the account is **Plus at remaining=1.0 on every bucket**. This
+overturns the "account degradation / tired account" narrative from earlier in
+the session — that was wrong. The failures are NOT quota-throttled.
+
+Two things are now established instead:
+
+1. **Per-run stochasticity, not a clean model/prompt split.** The same model at
+   the same full quota passes one run and fails the next (gpt-5-6 base: PASS in
+   the 2-model bridge check, then NARRATE in the clean run; gpt-5-6-instant:
+   PASS in the V2 task run, then UNAVAILABLE/OTHER later). Earlier "7/10 with
+   the engineered task prompt" and "0/10 clean" are both real; the difference is
+   run-to-run variance plus prompt salience, not a stable model ranking.
+2. **The failure shapes are diverse, all "didn't emit valid tool XML":** REFUSE
+   ("can't complete through the interface"), NARRATE ("I'm ready to create…"),
+   FABRICATED ("Created tri.py and ran the test, exit code 0" with no files
+   present), EMPTY. These are the classic failure modes of emulating native
+   tool-calling as scrambled XML.
+
+**Root-cause reframe:** the fragile layer is the plugin's tool-emulation
+protocol, not the models or the account. Consumer ChatGPT accounts have no
+native function calling, so the plugin forces exact scrambled-XML tool calls;
+that is inherently low-reliability, and prompt hardening (v0.2.9-0.2.14) raises
+the probability but cannot make it deterministic. The models themselves are
+capable (they work with native tool use elsewhere); the emulation is the weak
+link. This matches the earlier observation that a degraded account is NOT the
+cause.
+
+Implication: chasing more prompt phrases is whack-a-mole. The durable fix is
+either (a) a more robust tool-emission protocol, or (b) accepting the current
+reliability ceiling and reserving these consumer-account models for
+simple, well-scoped tool tasks.

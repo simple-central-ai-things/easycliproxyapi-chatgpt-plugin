@@ -2,6 +2,28 @@
 
 This file records user-facing release summaries.
 
+## v0.2.13 — 2026-11-13 (the master prompt keeps multi-step tasks going)
+
+The all-models coding eval (2026-11-13) surfaced a residual failure shape that
+the task-level prompt could not fully fix: models that create the first file and
+then STOP, or narrate the next step instead of acting. The cause was partly in
+the plugin's own master prompt: its after-results rule told the model to "answer
+briefly" after every tool result, which biases toward stopping mid-task.
+
+- **Continue the loop.** The after-results rule now conditions "answer briefly"
+  on the task being complete and requires "immediately emit the next step's tool
+  call - do not stop and wait" otherwise; the unconditional stop-after-result
+  wording is gone.
+- **Act, don't narrate.** A new RULE forbids describing a planned action in
+  prose instead of emitting the tool call (the NARRATE shape).
+- **Report only observed output.** A new RULE forbids claiming a result the model
+  did not see in a tool result (the FABRICATED shape).
+
+These system-level principles apply to every harness and every model that uses
+the plugin's tool mode - no per-task prompt engineering required. Pinned by
+`user_bridge_test.go` (the footer must carry all three, and the old stop-bias
+wording must be absent). Live re-verification against the eval battery pending.
+
 ## v0.2.12 — 2026-11-12 (the refusal nudge is structural, not phrase-matched)
 
 The v0.2.11 phrase widening still let DSH reword the same refusal past the

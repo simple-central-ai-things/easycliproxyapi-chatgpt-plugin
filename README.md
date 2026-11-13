@@ -96,7 +96,7 @@ the exception: it is pinned one-directionally, each documented row against
 the code.
 
 - Plugin identity (pinned by `internal/plugin/plugin_test.go`):
-  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.12`, provider key
+  `name=easycliproxyapi-chatgpt-provider`, `version=0.2.13`, provider key
   `chatgpt-proxy`, `GitHubRepository` = this repo (the host `validPlugin`
   gate rejects an empty value). The `registry.json` store entry carries the
   same id, version and repository URL.

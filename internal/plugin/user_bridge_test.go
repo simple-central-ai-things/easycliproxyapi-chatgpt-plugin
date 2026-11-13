@@ -39,6 +39,32 @@ func TestPromptForbidsProseRefusal(t *testing.T) {
 	}
 }
 
+// v0.2.13 prompt-engineering principles (from the all-models coding eval,
+// 2026-11-13): the residual failure shape was models that create one file then
+// STOP or narrate the next step. The footer previously told the model to
+// "answer briefly" after every tool result, which biases toward premature stop
+// on multi-step tasks. These rules fix that and add the two other shapes the
+// eval surfaced (narrate-instead-of-act, fabricate-unobserved output).
+func TestFooterContinuationAndHonestyRules(t *testing.T) {
+	// continue the loop when steps remain; only answer briefly when complete
+	if !strings.Contains(toolPromptFooter, "immediately emit the next step's tool call") ||
+		!strings.Contains(toolPromptFooter, "do not stop and wait") {
+		t.Fatalf("footer must keep the multi-step loop going when steps remain:\n%s", toolPromptFooter)
+	}
+	// the old unconditional "answer briefly after a result" stop-bias must be gone
+	if strings.Contains(toolPromptFooter, "After a tool result arrives, answer the user briefly") {
+		t.Fatalf("footer still carries the unconditional stop-after-result bias:\n%s", toolPromptFooter)
+	}
+	// anti-narration
+	if !strings.Contains(toolPromptFooter, "do not describe it in prose") {
+		t.Fatalf("footer must forbid narrating a planned action instead of emitting the call:\n%s", toolPromptFooter)
+	}
+	// anti-fabrication
+	if !strings.Contains(toolPromptFooter, "did not observe") {
+		t.Fatalf("footer must forbid reporting output the model did not observe:\n%s", toolPromptFooter)
+	}
+}
+
 func TestAppendUserBridgeLastUser(t *testing.T) {
 	in := []upstream.ConversationMessage{
 		{Role: "system", Content: "client system"},

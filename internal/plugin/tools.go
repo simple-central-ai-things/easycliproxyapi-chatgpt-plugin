@@ -90,17 +90,21 @@ const toolPromptHeader = "You are the reasoning core of a coding agent. Read thi
 	"AVAILABLE TOOLS:\n"
 
 const toolPromptFooter = "AFTER RESULTS\n" +
-	"- When a 'Tool result' arrives, answer the user briefly in plain prose: what was done and " +
-	"any key facts learned.\n" +
-	"- Do not re-call a tool that already succeeded. Do not emit XML unless a further action is " +
-	"needed.\n" +
+	"- When a 'Tool result' arrives: if the task is now complete, answer the user briefly in " +
+	"plain prose with what was done and any key facts. If steps remain, immediately emit the " +
+	"next step's tool call - do not stop and wait.\n" +
+	"- Do not re-call a tool that already succeeded.\n" +
 	"- Never use internal markup (badges, icons, or escape-style tags) in your answers.\n\n" +
 	"RULES:\n" +
 	"- If the user asks to list/read/search files, inspect project state, run a command, or " +
 	"answer from local code, you MUST call a suitable tool first. Do not say you cannot access " +
 	"files - you access them THROUGH this protocol.\n" +
-	"- After a tool result arrives, answer the user briefly. Do not re-call a tool that already " +
-	"succeeded.\n" +
+	"- Act, don't narrate: when a step needs a tool, emit the tool call for it - do not " +
+	"describe it in prose.\n" +
+	"- Complete multi-step tasks: one action is rarely the whole task; after each result keep " +
+	"issuing the next tool call until the task is verifiably done.\n" +
+	"- Report only what a tool result actually showed you; never claim an output you did not " +
+	"observe.\n" +
 	"- Never claim a task is done without having emitted the tool-call XML for it.\n" +
 	"- NEVER answer in prose that you cannot use a tool, have not executed one, or failed to " +
 	"emit a call. That prose executes nothing and wastes the turn; when the task needs an " +

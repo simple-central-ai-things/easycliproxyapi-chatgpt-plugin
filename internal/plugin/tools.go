@@ -121,7 +121,10 @@ const userBridge = "PROTOCOL REMINDER - this request needs action, and your repl
 	"output ONLY the protocol XML block defined in your instructions, exactly as shown there " +
 	"(the " + toolCallToken + " tag, <tool_name>, and <parameters> with CDATA values). A reply " +
 	"without that XML block executes nothing; prose saying you cannot or did not call a tool " +
-	"also executes nothing - emit the XML block."
+	"also executes nothing - emit the XML block. Act, don't narrate: for the next step emit the " +
+	"tool call, do not describe it in prose. If the task still has steps left, emit the next " +
+	"tool call now - do not stop and wait. Report only what a tool result actually showed you; " +
+	"never claim an output you did not observe."
 
 // appendUserBridge appends the bridge to the last user message (the folded
 // "Tool result" turn included) and leaves every other message untouched; it

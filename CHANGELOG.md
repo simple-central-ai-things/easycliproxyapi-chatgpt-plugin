@@ -2,6 +2,27 @@
 
 This file records user-facing release summaries.
 
+## v0.2.14 — 2026-11-13 (the engineering principles move to the user bridge)
+
+The all-models eval showed the benefit of the coding-prompt principles (act
+don't narrate, keep the loop going, report only observed output) lives at the
+USER message, not the system prompt: v0.2.13 added them to the master footer,
+but on a plain task the previously-flaky models still failed. The user bridge —
+appended to the last user message, right where V2's engineered task prompt sat —
+is the salient injection point (PROVENANCE: master in system + short reminder in
+user reached 5/5).
+
+- The bridge now carries the three principles compactly (act don't narrate /
+  keep issuing the next tool call when steps remain / report only observed
+  output), alongside the existing protocol reminder.
+- The bridge compactness bound rises 600 → 800 chars to carry the principles
+  without becoming a second master.
+
+This makes the effect harness- and model-agnostic: any harness in tool mode gets
+the engineered framing automatically, with no per-task prompt. Pinned by
+`user_bridge_test.go` (TestBridgeCarriesEngineeringPrinciples). Live re-verification
+pending.
+
 ## v0.2.13 — 2026-11-13 (the master prompt keeps multi-step tasks going)
 
 The all-models coding eval (2026-11-13) surfaced a residual failure shape that

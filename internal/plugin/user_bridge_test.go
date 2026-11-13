@@ -17,7 +17,7 @@ func TestUserBridgeConstant(t *testing.T) {
 	if !strings.Contains(userBridge, scramOpen) {
 		t.Fatalf("userBridge must reference the scrambled contract tag")
 	}
-	if len(userBridge) > 600 {
+	if len(userBridge) > 800 {
 		t.Fatalf("userBridge must stay compact (this is a reminder, not the master): %d chars", len(userBridge))
 	}
 }
@@ -34,8 +34,8 @@ func TestPromptForbidsProseRefusal(t *testing.T) {
 	if !strings.Contains(userBridge, "prose saying you cannot or did not call a tool also executes nothing") {
 		t.Fatalf("userBridge must name the prose refusal as executing nothing:\n%s", userBridge)
 	}
-	if len(userBridge) > 600 {
-		t.Fatalf("userBridge must stay compact after the refusal clause: %d chars", len(userBridge))
+	if len(userBridge) > 800 {
+		t.Fatalf("userBridge must stay compact: %d chars", len(userBridge))
 	}
 }
 
@@ -62,6 +62,28 @@ func TestFooterContinuationAndHonestyRules(t *testing.T) {
 	// anti-fabrication
 	if !strings.Contains(toolPromptFooter, "did not observe") {
 		t.Fatalf("footer must forbid reporting output the model did not observe:\n%s", toolPromptFooter)
+	}
+}
+
+// v0.2.14: the all-models eval showed the task-level engineered prompt (V2)
+// lifted flaky models, but the same principles added to the SYSTEM footer
+// (v0.2.13) did not transfer on a plain task - salience lives at the user
+// message. The bridge is the plugin's user-level injection point (PROVENANCE:
+// master in system + short reminder in user reached 5/5), so the principles
+// belong here.
+func TestBridgeCarriesEngineeringPrinciples(t *testing.T) {
+	if !strings.Contains(userBridge, "do not describe it in prose") {
+		t.Fatalf("bridge must forbid narrating the next step instead of emitting it:\n%s", userBridge)
+	}
+	if !strings.Contains(userBridge, "do not stop and wait") {
+		t.Fatalf("bridge must keep the multi-step loop going:\n%s", userBridge)
+	}
+	if !strings.Contains(userBridge, "did not observe") {
+		t.Fatalf("bridge must forbid reporting unobserved output:\n%s", userBridge)
+	}
+	// the bridge stays a reminder, not the master
+	if len(userBridge) > 800 {
+		t.Fatalf("bridge must stay compact: %d chars", len(userBridge))
 	}
 }
 

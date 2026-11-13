@@ -687,3 +687,30 @@ prompt-flippable borderline models (gpt-6-astra-wm / gpt-6-mini) with the
 engineered task framing; avoid `research` and base `gpt-6` for agentic coding
 (fabrication / stochastic refusal). Always verify tool results independently —
 fabricating models report success without acting.
+
+## Injection-point discovery: principles must live at the user bridge, not the system footer (2026-11-13)
+
+The goal was to move the coding-prompt engineering principles into the plugin
+so every harness/model benefits automatically (no per-task prompt). Two
+candidates, tested against a PLAIN (un-engineered) task:
+
+- **v0.2.13** put them in the variant-D master footer (system message). Result:
+  the 4 previously-flaky models still failed the plain task. System-prompt
+  salience is too low — the principles sit buried under the harness's own system
+  prompt and don't change behavior.
+- **v0.2.14** put them in the user bridge (appended to the last user message —
+  the same recency position where the task-level engineered prompt sat). Result:
+  gpt-6-instant and gpt-5-6 base now PASS the plain task via Claude Code with NO
+  per-task prompt.
+
+This matches the original bridge evidence (PROVENANCE 2026-11-11: "master in
+system + short reminder in user reached 5/5"). The salient position is the user
+message.
+
+Ceiling confirmed: gpt-6-thinking still fails the plain task even with the
+bridge (it narrates the expected output instead of completing the loop) — the
+full reasoning variants sit above what prompt engineering can move.
+
+Net: the engineering principles now ship in the plugin's user bridge,
+harness- and model-agnostic; the flippable models become usable with no per-task
+prompt, and the residual failures are model-tier-limited.

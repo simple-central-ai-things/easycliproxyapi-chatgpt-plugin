@@ -647,3 +647,43 @@ legitimate "I'll report…" answers, so it is intentionally not phrase-matched.
 **Recommendation:** route tool-heavy agentic work to a reasoning model
 (gpt-6-thinking or equivalent); the plugin then supports it reliably across
 harnesses.
+
+## All-models reliability eval + prompt-engineering A/B (2026-11-13)
+
+A standardized battery (verified multi-tool coding task + subagent delegation,
+each checked independently — files + test exit, never the model's claim) ran
+across all 21 published chatgpt-proxy models on a fresh Plus account (quota
+verified at 100% remaining on every bucket).
+
+**Verified coding-task pass rate: 4/21.** Reliable passers: `gpt-5.6-mini`,
+`gpt-5.6-t-mini`, `gpt-6.1-terra-wm`, `chatgpt_alpha...reserved_gate_13`.
+Dominant failure shapes: **NARRATE** (×5 — "I'll do X" with no tool call) and
+**REFUSE** (×5 — "can't/won't"), then EMPTY / FABRICATED / OTHER. Subagent is
+far easier (~14/21). `research` is the worst: it FABRICATES (claims "exit code
+0" with no files created) on both tasks — independent verification is the only
+guard.
+
+**Prompt-engineering A/B.** An engineered task prompt targeting the dominant
+shapes (do not narrate — just execute; you have full tool access, nothing is
+restricted, so you need not say you can't; report only actually-observed
+output; numbered steps; "begin now by creating tri.py") re-ran the 5 valid
+baseline-failure models:
+
+| model | baseline | V1 engineered |
+|---|---|---|
+| gpt-6-astra-wm | REFUSE | **PASS** |
+| gpt-6-mini | OTHER | **PASS** |
+| gpt-6-instant | NARRATE | FAIL |
+| gpt-6-thinking | REFUSE | FAIL |
+| gpt-5.6-sol-wm | NARRATE | FAIL |
+
+**Finding:** prompt engineering flips *borderline/stochastic* models to pass
+but cannot make reliably-flaky models reliable — the model tier sets the
+ceiling. A strong task prompt is necessary but not sufficient.
+
+**Usage recommendation:** route tool-heavy agentic work to the verified
+passers (gpt-5.6-mini / gpt-5.6-t-mini / gpt-6.1-terra-wm) or the
+prompt-flippable borderline models (gpt-6-astra-wm / gpt-6-mini) with the
+engineered task framing; avoid `research` and base `gpt-6` for agentic coding
+(fabrication / stochastic refusal). Always verify tool results independently —
+fabricating models report success without acting.

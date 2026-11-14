@@ -798,3 +798,28 @@ Usage guidance: use the 7 passers for agentic coding; reserve the thinking
 variants for reasoning/research (not tool-emission work). Recipe = compact
 plugin prompt (v0.2.16) + nudge retry-recovery + a structured TASK prompt for
 multi-step work.
+
+## Complete 21-model usability with the working recipe (v0.2.16 + engineered task prompt, 2026-11-14)
+
+The remaining models (-wm widget family + research + reserved_gate) were run
+with the same recipe, completing all 21 published chatgpt models. Each verified
+independently (files + test exit).
+
+PASS (14):
+- plain (7): gpt-6 base, gpt-6-mini, gpt-6-instant, gpt-6-t-mini, gpt-5-6 base,
+  gpt-5-6-mini, gpt-5-6-instant
+- -wm (6): gpt-6-sol-wm, gpt-6.1-sol-wm, gpt-6.1-terra-wm, gpt-5.6-luna-wm,
+  gpt-5.6-sol-wm, gpt-5.6-terra-wm
+- other (1): chatgpt_alpha...reserved_gate_13
+
+FAIL (7):
+- gpt-6-thinking, gpt-5-6-thinking, gpt-5-6-t-mini: REFUSE (reasoning variants
+  narrate instead of emitting the scrambled XML)
+- gpt-6-astra-wm: EMPTY; gpt-6-luna-wm: OTHER
+- research: REFUSE; chatgpt_alpha...reserved_gate_12: FABRICATE
+
+Findings: the -wm models are NOT widget-only - 6/8 pass the coding task with the
+recipe (astra/luna-wm are the exceptions). The thinking variants, research, and
+reserved_gate_12 are the ones to avoid for agentic coding. 14/21 models are
+usable for agentic coding with the compact-prompt + nudge-recovery + structured-
+task-prompt recipe.

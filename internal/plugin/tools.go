@@ -90,25 +90,18 @@ const toolPromptHeader = "You are the reasoning core of a coding agent. Read thi
 	"AVAILABLE TOOLS:\n"
 
 const toolPromptFooter = "AFTER RESULTS\n" +
-	"- When a 'Tool result' arrives: if the task is now complete, answer the user briefly in " +
-	"plain prose with what was done and any key facts. If steps remain, immediately emit the " +
-	"next step's tool call - do not stop and wait.\n" +
-	"- Do not re-call a tool that already succeeded.\n" +
+	"- When a 'Tool result' arrives, answer the user briefly in plain prose: what was done and " +
+	"any key facts learned.\n" +
+	"- Do not re-call a tool that already succeeded. Do not emit XML unless a further action is " +
+	"needed.\n" +
 	"- Never use internal markup (badges, icons, or escape-style tags) in your answers.\n\n" +
 	"RULES:\n" +
 	"- If the user asks to list/read/search files, inspect project state, run a command, or " +
 	"answer from local code, you MUST call a suitable tool first. Do not say you cannot access " +
 	"files - you access them THROUGH this protocol.\n" +
-	"- Act, don't narrate: when a step needs a tool, emit the tool call for it - do not " +
-	"describe it in prose.\n" +
-	"- Complete multi-step tasks: one action is rarely the whole task; after each result keep " +
-	"issuing the next tool call until the task is verifiably done.\n" +
-	"- Report only what a tool result actually showed you; never claim an output you did not " +
-	"observe.\n" +
-	"- Never claim a task is done without having emitted the tool-call XML for it.\n" +
-	"- NEVER answer in prose that you cannot use a tool, have not executed one, or failed to " +
-	"emit a call. That prose executes nothing and wastes the turn; when the task needs an " +
-	"action, your reply must be the protocol XML."
+	"- After a tool result arrives, answer the user briefly. Do not re-call a tool that already " +
+	"succeeded.\n" +
+	"- Never claim a task is done without having emitted the tool-call XML for it."
 
 // userBridge is the compact action-oriented reminder tool mode appends to
 // the LAST user message. Live evidence (PROVENANCE.md 2026-11-11) on a
@@ -120,12 +113,7 @@ const toolPromptFooter = "AFTER RESULTS\n" +
 const userBridge = "PROTOCOL REMINDER - this request needs action, and your reply must carry it:\n" +
 	"output ONLY the protocol XML block defined in your instructions, exactly as shown there " +
 	"(the " + toolCallToken + " tag, <tool_name>, and <parameters> with CDATA values). A reply " +
-	"without that XML block executes nothing; prose saying you cannot or did not call a tool " +
-	"also executes nothing - emit the XML block. Act, don't narrate: for the next step emit the " +
-	"tool call, do not describe it in prose. If the task still has steps left, emit the next " +
-	"tool call now - do not stop and wait. Report only what a tool result actually showed you; " +
-	"never claim an output you did not observe. Begin NOW: break the task into steps and make " +
-	"your very first reply the tool call that performs the first step."
+	"without that XML block executes nothing."
 
 // appendUserBridge appends the bridge to the last user message (the folded
 // "Tool result" turn included) and leaves every other message untouched; it

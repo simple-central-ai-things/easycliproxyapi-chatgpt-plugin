@@ -2,6 +2,19 @@
 
 This file records user-facing release summaries.
 
+## v0.2.16 — 2026-11-14 (revert the prompt bloat; keep the nudge recovery)
+
+The v0.2.11-0.2.15 prompt additions (anti-refusal / anti-narrate / anti-fabricate
+/ start-now, in the footer and bridge) more than doubled the bridge (~340 → ~800
+chars). Live diagnosis showed basic chat still works ("reply OK") but tool
+emission regressed to empty/fabricated replies even on a trivial file task, on
+both OpenCode and Claude Code, at full quota. The original compact variant-D
+prompt had measured 9/10 emission before these additions. This reverts the
+footer and bridge to those known-good compact originals. The nudge retry-recovery
+logic (v0.2.9-0.2.12: empty-args / refusal / markup-only / structural detector)
+is kept - it recovers misses without bloating the prompt. The prompt-text pin
+tests added for the reverted wording are removed.
+
 ## v0.2.15 — 2026-11-13 (the bridge tells the model to start with the first tool call now)
 
 The clean re-assessment showed the generic bridge principles alone left models

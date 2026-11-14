@@ -750,3 +750,30 @@ Implication: chasing more prompt phrases is whack-a-mole. The durable fix is
 either (a) a more robust tool-emission protocol, or (b) accepting the current
 reliability ceiling and reserving these consumer-account models for
 simple, well-scoped tool tasks.
+
+## REGRESSION + FIX: prompt bloat broke tool emission; reverted to compact (v0.2.16, 2026-11-14)
+
+The v0.2.11-0.2.15 prompt additions (anti-refusal / anti-narrate / anti-fabricate
+/ start-now, layered into the footer and bridge) more than doubled the bridge
+(~340 → ~800 chars). This REGRESSED tool emission: a trivial single-file task
+("create hello.txt") returned empty (OpenCode) or fabricated success (Claude
+Code) on both harnesses, at full quota. Diagnosis that isolated it: a trivial
+NON-tool prompt ("reply OK") still worked, so the account/gateway were fine and
+the regression was specific to tool emission - i.e. the bloated prompt, not the
+models or quota.
+
+Fix (v0.2.16): revert the footer and bridge to the known-good compact variant-D
+originals (which had measured 9/10 emission before the additions). KEEP the nudge
+retry-recovery logic (v0.2.9-0.2.12) - it recovers empty-args / refusal /
+markup-only misses without bloating the prompt. Removed the prompt-text pin tests
+for the reverted wording.
+
+Verified after the revert: trivial file creation PASS on BOTH OpenCode and Claude
+Code. Multi-step coding with the engineered task prompt (first-output-is-a-tool-
+call + numbered steps + act-don't-narrate) PASS on gpt-5-6 and gpt-6-instant.
+
+Lesson: for these consumer-account models, prompt BREVITY beats prompt
+completeness - extra instructions compete with the scrambled-XML protocol and
+degrade emission. The durable reliability levers are (a) the compact protocol
+prompt, (b) the nudge retry-recovery, and (c) a well-structured TASK prompt for
+multi-step work - not piling more rules into the system/bridge prompt.

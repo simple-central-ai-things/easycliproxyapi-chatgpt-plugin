@@ -777,3 +777,24 @@ completeness - extra instructions compete with the scrambled-XML protocol and
 degrade emission. The durable reliability levers are (a) the compact protocol
 prompt, (b) the nudge retry-recovery, and (c) a well-structured TASK prompt for
 multi-step work - not piling more rules into the system/bridge prompt.
+
+## Final plain-model usability with the working recipe (v0.2.16 + engineered task prompt, 2026-11-14)
+
+After the prompt-bloat revert (v0.2.16), the engineered task prompt
+(first-output-is-a-tool-call + numbered steps + act-don't-narrate) was run across
+all 10 plain (non--wm) models, each verified independently (files + test exit):
+
+PASS (7): gpt-6 base, gpt-6-mini, gpt-6-instant, gpt-6-t-mini (thinking-mini),
+gpt-5-6 base, gpt-5-6-mini, gpt-5-6-instant.
+REFUSE (3): gpt-6-thinking, gpt-5-6-thinking, gpt-5-6-t-mini (this run).
+
+Pattern: the full "thinking" (reasoning) variants refuse - they narrate/plan
+instead of emitting the scrambled-XML tool call. The base/mini/instant/
+thinking-mini variants work with the recipe. Notably gpt-6 base, which refused
+under the bloated prompt, now passes - the revert + structured task prompt
+unlocked it.
+
+Usage guidance: use the 7 passers for agentic coding; reserve the thinking
+variants for reasoning/research (not tool-emission work). Recipe = compact
+plugin prompt (v0.2.16) + nudge retry-recovery + a structured TASK prompt for
+multi-step work.
